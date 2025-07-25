@@ -51,9 +51,21 @@ export default function WidgetGenerator() {
       if (data.success) {
         setWidgetId(data.widgetId);
         
-        // Generování embed kódu
+        // Generování embed kódu s auto-resize
         const embedUrl = `${window.location.origin}/embed/${data.widgetId}`;
-        const iframe = `<iframe src="${embedUrl}" width="100%" height="400" frameborder="0" style="border: none; border-radius: ${config.borderRadius}px;"></iframe>`;
+        const iframe = `<iframe src="${embedUrl}" width="100%" height="200" frameborder="0" style="border: none; border-radius: ${config.borderRadius}px;" onload="this.style.height=this.contentWindow.document.body.scrollHeight + 'px'"></iframe>
+
+<script>
+// Auto-resize iframe listener
+window.addEventListener('message', function(e) {
+  if (e.data.type === 'resize-iframe') {
+    const iframe = document.querySelector('iframe[src*="${data.widgetId}"]');
+    if (iframe) {
+      iframe.style.height = e.data.height + 'px';
+    }
+  }
+});
+</script>`;
         setEmbedCode(iframe);
         
         // Zobrazit zprávu uživateli

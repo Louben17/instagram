@@ -55,24 +55,26 @@ export default function EmbedPage() {
   }, [params.id]);
 
   useEffect(() => {
-    // Načtení Instagram embed script
-    if (widgetData && typeof window !== 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://www.instagram.com/embed.js';
-      script.async = true;
-      document.body.appendChild(script);
+    // Automatické nastavení výšky iframe z parent window
+    const updateHeight = () => {
+      const height = document.body.scrollHeight;
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'resize-iframe',
+          height: height
+        }, '*');
+      }
+    };
 
-      // Znovu inicializace embedů po načtení
-      script.onload = () => {
-        if ((window as any).instgrm) {
-          (window as any).instgrm.Embeds.process();
-        }
-      };
-
-      return () => {
-        document.body.removeChild(script);
-      };
-    }
+    // Zavolej po načtení
+    updateHeight();
+    
+    // A po resize
+    window.addEventListener('resize', updateHeight);
+    
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+    };
   }, [widgetData]);
 
   if (loading) {
@@ -113,7 +115,7 @@ export default function EmbedPage() {
   const { posts, config } = widgetData;
 
   return (
-    <div className="min-h-screen bg-white p-1 sm:p-2">
+    <div className="bg-white p-1 sm:p-2">
       <div className="max-w-6xl mx-auto">
         <style jsx global>{`
           .instagram-feed-grid {
