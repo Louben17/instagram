@@ -113,13 +113,13 @@ export default function EmbedPage() {
   const { posts, config } = widgetData;
 
   return (
-    <div className="min-h-screen bg-white p-2 sm:p-4">
+    <div className="min-h-screen bg-white p-1 sm:p-2">
       <div className="max-w-6xl mx-auto">
         <style jsx global>{`
           .instagram-feed-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
+            gap: 4px;
             width: 100%;
           }
           
@@ -132,38 +132,36 @@ export default function EmbedPage() {
           @media (max-width: 768px) {
             .instagram-feed-grid {
               grid-template-columns: repeat(3, 1fr);
-              gap: 6px;
+              gap: 3px;
             }
           }
           
           @media (max-width: 480px) {
             .instagram-feed-grid {
               grid-template-columns: repeat(2, 1fr);
-              gap: 4px;
+              gap: 2px;
             }
           }
           
-          .ig-post {
+          .ig-post-clean {
             position: relative;
             background: white;
-            border-radius: 8px;
+            border-radius: 4px;
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.2s ease;
             cursor: pointer;
           }
           
-          .ig-post:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          .ig-post-clean:hover {
+            transform: scale(1.02);
           }
           
           @media (max-width: 768px) {
-            .ig-post {
-              border-radius: 6px;
+            .ig-post-clean {
+              border-radius: 2px;
             }
             
-            .ig-post:hover {
+            .ig-post-clean:hover {
               transform: none;
             }
           }
@@ -177,13 +175,6 @@ export default function EmbedPage() {
               dangerouslySetInnerHTML={{ __html: post.html }}
             />
           ))}
-        </div>
-
-        {/* Branding - minimální */}
-        <div className="text-center mt-4 opacity-50">
-          <p className="text-gray-400 text-xs">
-            Instagram Feed
-          </p>
         </div>
       </div>
     </div>

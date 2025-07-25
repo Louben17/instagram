@@ -127,52 +127,44 @@ export async function POST(request: NextRequest) {
               firstPost: mediaData.data?.[0]
             });
 
-            // Vytvoříme widget z reálných dat - čistý responsive design
+            // Vytvoříme widget z reálných dat - ultra čistý design
             const posts: InstagramPost[] = mediaData.data.slice(0, 5).map((item: any) => ({
               id: item.id,
               html: `
-                <div class="ig-post" style="position: relative; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: transform 0.2s ease, box-shadow 0.2s ease;">
-                  <a href="${item.permalink}" target="_blank" style="text-decoration: none; color: inherit; display: block;">
+                <div class="ig-post-clean" style="position: relative; background: white; border-radius: 4px; overflow: hidden; transition: transform 0.2s ease;">
+                  <a href="${item.permalink}" target="_blank" style="text-decoration: none; display: block;">
                     <div style="position: relative; width: 100%; aspect-ratio: 1; overflow: hidden;">
                       ${item.media_type === 'VIDEO' ? `
                         <video 
-                          style="width: 100%; height: 100%; object-fit: cover;" 
+                          style="width: 100%; height: 100%; object-fit: cover; display: block;" 
                           poster="${item.thumbnail_url || item.media_url}"
                           muted
+                          loop
                           onmouseover="this.play()" 
                           onmouseout="this.pause()"
                         >
                           <source src="${item.media_url}" type="video/mp4">
                         </video>
-                        <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); border-radius: 4px; padding: 4px 6px; font-size: 11px; color: white; font-weight: 500;">
-                          ${item.media_type === 'VIDEO' ? (item.media_url && item.media_url.includes('reel') ? 'REEL' : 'VIDEO') : ''}
-                        </div>
                       ` : `
                         <img 
                           src="${item.media_url || item.thumbnail_url}" 
                           alt="Instagram post" 
-                          style="width: 100%; height: 100%; object-fit: cover;" 
+                          style="width: 100%; height: 100%; object-fit: cover; display: block;" 
                           loading="lazy"
                         />
                       `}
-                      <div style="position: absolute; bottom: 8px; left: 8px; right: 8px;">
-                        <div style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); border-radius: 4px; padding: 6px 8px; font-size: 11px; color: white; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                          ${item.caption ? item.caption.substring(0, 60) + (item.caption.length > 60 ? '...' : '') : '@' + userData.username}
-                        </div>
-                      </div>
                     </div>
                   </a>
                 </div>
                 
                 <style>
-                  .ig-post:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                  .ig-post-clean:hover {
+                    transform: scale(1.02);
                   }
                   
                   @media (max-width: 768px) {
-                    .ig-post {
-                      border-radius: 6px;
+                    .ig-post-clean:hover {
+                      transform: none;
                     }
                   }
                 </style>
