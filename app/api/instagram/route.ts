@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+// Initialize Redis client
+const redis = Redis.fromEnv();
 
 interface WidgetConfig {
   layout: 'grid' | 'slider' | 'masonry';
@@ -259,8 +262,8 @@ export async function POST(request: NextRequest) {
               profileUrl: url
             };
 
-            // Uložení do Vercel KV místo memory
-            await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
+            // Uložení do Upstash Redis místo @vercel/kv
+            await redis.set(`widget:${widgetId}`, JSON.stringify(widgetData), { ex: KV_TTL });
 
             console.log('Real Instagram Business API widget created:', widgetId);
 
@@ -319,18 +322,8 @@ export async function POST(request: NextRequest) {
               height: oembedData.height || 540
             };
 
-const widgetId = Math.random().toString(36).substr(2, 9);
-const now = Date.now();
-
-const widgetData: WidgetData = { 
-  posts: [post], 
-  config: config || {},
-  createdAt: now,
-  lastRefresh: now,
-  profileUrl: instagramUrl
-};
-
-await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
+            const widgetId = Math.random().toString(36).substr(2, 9);
+            widgets.set(widgetId, { posts: [post], config: config || {} });
 
             return NextResponse.json({ 
               success: true, 
@@ -393,7 +386,7 @@ await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
       profileUrl: url
     };
 
-    await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
+                await redis.set(`widget:${widgetId}`, JSON.stringify(widgetData), { ex: KV_TTL });
 
     console.log('Fallback widget created:', widgetId);
 
@@ -423,12 +416,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Widget ID je povinné' }, { status: 400 });
     }
 
-    // Načtení z Vercel KV místo memory
-    const widget = await kv.get(`widget:${widgetId}`) as WidgetData | null;
-    console.log('Widget found in KV:', !!widget);
+    // Načtení z Upstash Redis
+    const widgetDataString = await redis.get(`widget:${widgetId}`) as string | null;
+    const widget = widgetDataString ? JSON.parse(widgetDataString) as WidgetData : null;
+    console.log('Widget found in Redis:', !!widget);
     
     if (!widget) {
-      console.log(`Widget ${widgetId} not found in KV storage`);
+      console.log(`Widget ${widgetId} not found in Redis storage`);
       return NextResponse.json({ error: 'Widget nenalezen' }, { status: 404 });
     }
 
@@ -439,7 +433,7 @@ export async function GET(request: NextRequest) {
     // Zkontroluj expiraci widgetu (60 dní)
     if (age > MAX_WIDGET_AGE) {
       console.log(`Widget ${widgetId} expired (${Math.round(age / (24 * 60 * 60 * 1000))} days old)`);
-      await kv.del(`widget:${widgetId}`);
+      await redis.del(`widget:${widgetId}`);
       return NextResponse.json({ error: 'Widget vypršel platnost' }, { status: 410 });
     }
 
@@ -459,7 +453,7 @@ export async function GET(request: NextRequest) {
             config: widget.config
           };
           
-          await kv.set(`widget:${widgetId}`, updatedWidget, { ex: KV_TTL });
+          await redis.set(`widget:${widgetId}`, JSON.stringify(updatedWidget), { ex: KV_TTL });
           console.log(`Widget ${widgetId} successfully refreshed`);
           
           return NextResponse.json({ 
@@ -474,7 +468,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('Returning widget data from KV');
+    console.log('Returning widget data from Redis');
     return NextResponse.json({ 
       success: true, 
       data: widget 
