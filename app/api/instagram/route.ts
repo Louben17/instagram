@@ -134,25 +134,12 @@ export async function POST(request: NextRequest) {
                 <div class="ig-post-clean" style="position: relative; background: white; border-radius: 4px; overflow: hidden; transition: transform 0.2s ease;">
                   <a href="${item.permalink}" target="_blank" style="text-decoration: none; display: block;">
                     <div style="position: relative; width: 100%; aspect-ratio: 1; overflow: hidden;">
-                      ${item.media_type === 'VIDEO' ? `
-                        <video 
-                          style="width: 100%; height: 100%; object-fit: cover; display: block;" 
-                          poster="${item.thumbnail_url || item.media_url}"
-                          muted
-                          loop
-                          onmouseover="this.play()" 
-                          onmouseout="this.pause()"
-                        >
-                          <source src="${item.media_url}" type="video/mp4">
-                        </video>
-                      ` : `
-                        <img 
-                          src="${item.media_url || item.thumbnail_url}" 
-                          alt="Instagram post" 
-                          style="width: 100%; height: 100%; object-fit: cover; display: block;" 
-                          loading="lazy"
-                        />
-                      `}
+                      <img 
+                        src="${item.media_type === 'VIDEO' ? (item.thumbnail_url || item.media_url) : (item.media_url || item.thumbnail_url)}" 
+                        alt="Instagram post" 
+                        style="width: 100%; height: 100%; object-fit: cover; display: block;" 
+                        loading="lazy"
+                      />
                     </div>
                   </a>
                 </div>
