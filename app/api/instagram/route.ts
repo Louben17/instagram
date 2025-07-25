@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { InstagramTokenManager } from '../../../lib/instagram-token';
 
 interface WidgetConfig {
   layout: 'grid' | 'slider' | 'masonry';
@@ -85,15 +84,19 @@ export async function POST(request: NextRequest) {
       try {
         console.log('Testing Instagram Graph API...');
         
-        // Získání platného tokenu (s auto-refresh)
-        const tokenManager = InstagramTokenManager.getInstance();
-        const validToken = await tokenManager.getValidToken();
+        // Jednoduchý token handling bez external class
+        const instagramToken = process.env.INSTAGRAM_ACCESS_TOKEN;
         
-        console.log('Using token for API calls');
+        if (!instagramToken) {
+          console.log('No Instagram token found - using fallback for local development');
+          throw new Error('Instagram token not configured');
+        }
+        
+        console.log('Instagram token found:', instagramToken.substring(0, 10) + '...');
         
         // Test 1: Získání základních informací o účtu
         const userResponse = await fetch(
-          `https://graph.instagram.com/me?fields=id,username,media_count&access_token=${validToken}`,
+          `https://graph.instagram.com/me?fields=id,username,media_count&access_token=${instagramToken}`,
           {
             method: 'GET',
             headers: { 'Accept': 'application/json' }
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
           
           // Test 2: Získání nejnovějších médií
           const mediaResponse = await fetch(
-            `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=5&access_token=${validToken}`,
+            `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=5&access_token=${instagramToken}`,
             {
               method: 'GET',
               headers: { 'Accept': 'application/json' }
