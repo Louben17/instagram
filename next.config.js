@@ -1,11 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
   images: {
     domains: [
       'scontent.cdninstagram.com',
+      'scontent-prg1-1.cdninstagram.com',
       'instagram.com',
       'www.instagram.com'
     ],
