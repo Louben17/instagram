@@ -427,8 +427,27 @@ export async function GET(request: NextRequest) {
     }
 
     // Načtení z Upstash Redis
-    const widgetDataString = await redis.get(`widget:${widgetId}`) as string | null;
-    const widget = widgetDataString ? JSON.parse(widgetDataString) as WidgetData : null;
+    const widgetDataRaw = await redis.get(`widget:${widgetId}`);
+    console.log('Raw data from Redis:', typeof widgetDataRaw, widgetDataRaw);
+    
+    let widget: WidgetData | null = null;
+    
+    if (widgetDataRaw) {
+      try {
+        // Pokud už je to objekt, použij přímo
+        if (typeof widgetDataRaw === 'object') {
+          widget = widgetDataRaw as WidgetData;
+        } else {
+          // Pokud je to string, parsuj
+          widget = JSON.parse(widgetDataRaw as string) as WidgetData;
+        }
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.log('Problematic data:', widgetDataRaw);
+        return NextResponse.json({ error: 'Chyba při načítání widget dat' }, { status: 500 });
+      }
+    }
+    
     console.log('Widget found in Redis:', !!widget);
     
     if (!widget) {
