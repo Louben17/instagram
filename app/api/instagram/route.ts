@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { InstagramTokenManager } from '../../lib/instagram-token';
+import { InstagramTokenManager } from '../../../lib/instagram-token';
 
 interface WidgetConfig {
   layout: 'grid' | 'slider' | 'masonry';
