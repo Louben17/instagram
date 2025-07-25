@@ -1,27 +1,44 @@
 {
-  "name": "instagram-widget",
-  "version": "0.1.0",
+  "name": "instagram-widget-generator",
+  "version": "1.0.0",
+  "description": "Instagram Widget Generator pro Shoptet e-shopy",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "next": "15.4.3"
-  },
-  "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.4.3",
-    "@eslint/eslintrc": "^3"
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.5",
+    "lucide-react": "^0.263.1",
+    "next": "14.2.5",
+    "react": "^18",
+    "react-dom": "^18",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "instagram",
+    "widget",
+    "shoptet",
+    "e-shop",
+    "nextjs",
+    "react"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11"
   }
 }
