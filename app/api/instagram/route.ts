@@ -472,4 +472,4 @@ export async function GET(request: NextRequest) {
       error: 'Chyba při načítání widgetu' 
     }, { status: 500 });
   }
-}
+} 
