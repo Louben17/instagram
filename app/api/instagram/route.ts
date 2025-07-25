@@ -322,8 +322,18 @@ export async function POST(request: NextRequest) {
               height: oembedData.height || 540
             };
 
-            const widgetId = Math.random().toString(36).substr(2, 9);
-            widgets.set(widgetId, { posts: [post], config: config || {} });
+const widgetId = Math.random().toString(36).substr(2, 9);
+const now = Date.now();
+
+const widgetData: WidgetData = { 
+  posts: [post], 
+  config: config || {},
+  createdAt: now,
+  lastRefresh: now,
+  profileUrl: instagramUrl
+};
+
+await redis.set(`widget:${widgetId}`, JSON.stringify(widgetData), { ex: KV_TTL });
 
             return NextResponse.json({ 
               success: true, 
