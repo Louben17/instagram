@@ -17,10 +17,99 @@ interface InstagramPost {
   height?: number;
 }
 
-// Simulace databáze - v produkci použijte skutečnou DB
+// Simulace databáze s cache expiry - v produkci použijte skutečnou DB
 // Používáme global object, aby přežil hot reloads
-const globalForWidgets = globalThis as unknown as { widgets: Map<string, { posts: InstagramPost[], config: WidgetConfig }> };
+const globalForWidgets = globalThis as unknown as { 
+  widgets: Map<string, { 
+    posts: InstagramPost[], 
+    config: WidgetConfig,
+    createdAt: number,
+    lastRefresh: number,
+    profileUrl: string // Přidáme pro refresh
+  }> 
+};
 const widgets = globalForWidgets.widgets || (globalForWidgets.widgets = new Map());
+
+// Cache settings
+const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hodiny
+const MAX_WIDGET_AGE = 60 * 24 * 60 * 60 * 1000; // 60 dní
+
+// Funkce pro refresh widget dat
+async function refreshWidgetData(widget: any): Promise<any> {
+  const instagramToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+  
+  if (!instagramToken) {
+    throw new Error('Instagram token not available for refresh');
+  }
+
+  console.log('Refreshing widget data from Instagram API...');
+
+  // Načti fresh data z Instagram API
+  const userResponse = await fetch(
+    `https://graph.instagram.com/me?fields=id,username,media_count&access_token=${instagramToken}`,
+    {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    }
+  );
+
+  if (!userResponse.ok) {
+    throw new Error(`User API failed: ${userResponse.status}`);
+  }
+
+  const userData = await userResponse.json();
+
+  const mediaResponse = await fetch(
+    `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=5&access_token=${instagramToken}`,
+    {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    }
+  );
+
+  if (!mediaResponse.ok) {
+    throw new Error(`Media API failed: ${mediaResponse.status}`);
+  }
+
+  const mediaData = await mediaResponse.json();
+
+  // Vytvoř fresh posts
+  const posts: InstagramPost[] = mediaData.data.slice(0, 5).map((item: any) => ({
+    id: item.id,
+    html: `
+      <div class="ig-post-clean" style="position: relative; background: white; border-radius: 4px; overflow: hidden; transition: transform 0.2s ease;">
+        <a href="${item.permalink}" target="_blank" style="text-decoration: none; display: block;">
+          <div style="position: relative; width: 100%; aspect-ratio: 1; overflow: hidden;">
+            <img 
+              src="${item.media_type === 'VIDEO' ? (item.thumbnail_url || item.media_url) : (item.media_url || item.thumbnail_url)}" 
+              alt="Instagram post" 
+              style="width: 100%; height: 100%; object-fit: cover; display: block;" 
+              loading="lazy"
+            />
+          </div>
+        </a>
+      </div>
+      
+      <style>
+        .ig-post-clean:hover {
+          transform: scale(1.02);
+        }
+        
+        @media (max-width: 768px) {
+          .ig-post-clean:hover {
+            transform: none;
+          }
+        }
+      </style>
+    `,
+    thumbnail_url: item.media_url || item.thumbnail_url,
+    author_name: userData.username,
+    width: 300,
+    height: 300
+  }));
+
+  return { posts };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -163,7 +252,15 @@ export async function POST(request: NextRequest) {
             }));
 
             const widgetId = Math.random().toString(36).substr(2, 9);
-            widgets.set(widgetId, { posts, config: config || {} });
+            const now = Date.now();
+            
+            widgets.set(widgetId, { 
+              posts, 
+              config: config || {},
+              createdAt: now,
+              lastRefresh: now,
+              profileUrl: url // Uložíme URL pro refresh
+            });
 
             console.log('Real Instagram Business API widget created:', widgetId);
 
@@ -276,7 +373,15 @@ export async function POST(request: NextRequest) {
     };
 
     const widgetId = Math.random().toString(36).substr(2, 9);
-    widgets.set(widgetId, { posts: [fallbackPost], config: config || {} });
+    const now = Date.now();
+    
+    widgets.set(widgetId, { 
+      posts: [fallbackPost], 
+      config: config || {},
+      createdAt: now,
+      lastRefresh: now,
+      profileUrl: url
+    });
 
     console.log('Fallback widget created:', widgetId);
 
@@ -313,6 +418,46 @@ export async function GET(request: NextRequest) {
     if (!widget) {
       console.log(`Widget ${widgetId} not found in memory`);
       return NextResponse.json({ error: 'Widget nenalezen' }, { status: 404 });
+    }
+
+    const now = Date.now();
+    const age = now - widget.createdAt;
+    const timeSinceRefresh = now - widget.lastRefresh;
+
+    // Zkontroluj expiraci widgetu (60 dní)
+    if (age > MAX_WIDGET_AGE) {
+      console.log(`Widget ${widgetId} expired (${Math.round(age / (24 * 60 * 60 * 1000))} days old)`);
+      widgets.delete(widgetId);
+      return NextResponse.json({ error: 'Widget vypršel platnost' }, { status: 410 });
+    }
+
+    // Zkontroluj, jestli potřebuje refresh (2 hodiny)
+    if (timeSinceRefresh > CACHE_DURATION && widget.profileUrl) {
+      console.log(`Widget ${widgetId} needs refresh (${Math.round(timeSinceRefresh / (60 * 60 * 1000))} hours old)`);
+      
+      try {
+        // Pokus o refresh dat
+        const refreshedWidget = await refreshWidgetData(widget);
+        if (refreshedWidget) {
+          widgets.set(widgetId, {
+            ...refreshedWidget,
+            createdAt: widget.createdAt, // Zachovej original timestamp
+            lastRefresh: now,
+            profileUrl: widget.profileUrl,
+            config: widget.config
+          });
+          console.log(`Widget ${widgetId} successfully refreshed`);
+          
+          return NextResponse.json({ 
+            success: true, 
+            data: widgets.get(widgetId),
+            refreshed: true
+          });
+        }
+      } catch (refreshError) {
+        console.error(`Widget ${widgetId} refresh failed:`, refreshError);
+        // Pokračuj se starými daty
+      }
     }
 
     console.log('Returning widget data');
