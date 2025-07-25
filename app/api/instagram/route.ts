@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { kv } from '@vercel/kv';
 
 interface WidgetConfig {
   layout: 'grid' | 'slider' | 'masonry';
@@ -17,22 +18,18 @@ interface InstagramPost {
   height?: number;
 }
 
-// Simulace databáze s cache expiry - v produkci použijte skutečnou DB
-// Používáme global object, aby přežil hot reloads
-const globalForWidgets = globalThis as unknown as { 
-  widgets: Map<string, { 
-    posts: InstagramPost[], 
-    config: WidgetConfig,
-    createdAt: number,
-    lastRefresh: number,
-    profileUrl: string // Přidáme pro refresh
-  }> 
-};
-const widgets = globalForWidgets.widgets || (globalForWidgets.widgets = new Map());
+interface WidgetData {
+  posts: InstagramPost[];
+  config: WidgetConfig;
+  createdAt: number;
+  lastRefresh: number;
+  profileUrl: string;
+}
 
 // Cache settings
 const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hodiny
 const MAX_WIDGET_AGE = 60 * 24 * 60 * 60 * 1000; // 60 dní
+const KV_TTL = 60 * 24 * 60 * 60; // 60 dní v sekundách pro KV
 
 // Funkce pro refresh widget dat
 async function refreshWidgetData(widget: any): Promise<any> {
@@ -254,13 +251,16 @@ export async function POST(request: NextRequest) {
             const widgetId = Math.random().toString(36).substr(2, 9);
             const now = Date.now();
             
-            widgets.set(widgetId, { 
+            const widgetData: WidgetData = { 
               posts, 
               config: config || {},
               createdAt: now,
               lastRefresh: now,
-              profileUrl: url // Uložíme URL pro refresh
-            });
+              profileUrl: url
+            };
+
+            // Uložení do Vercel KV místo memory
+            await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
 
             console.log('Real Instagram Business API widget created:', widgetId);
 
@@ -319,16 +319,8 @@ export async function POST(request: NextRequest) {
               height: oembedData.height || 540
             };
 
-const widgetId = Math.random().toString(36).substr(2, 9);
-const now = Date.now();
-
-widgets.set(widgetId, { 
-  posts: [post], 
-  config: config || {},
-  createdAt: now,
-  lastRefresh: now,
-  profileUrl: instagramUrl
-});
+            const widgetId = Math.random().toString(36).substr(2, 9);
+            widgets.set(widgetId, { posts: [post], config: config || {} });
 
             return NextResponse.json({ 
               success: true, 
@@ -383,13 +375,15 @@ widgets.set(widgetId, {
     const widgetId = Math.random().toString(36).substr(2, 9);
     const now = Date.now();
     
-    widgets.set(widgetId, { 
+    const widgetData: WidgetData = { 
       posts: [fallbackPost], 
       config: config || {},
       createdAt: now,
       lastRefresh: now,
       profileUrl: url
-    });
+    };
+
+    await kv.set(`widget:${widgetId}`, widgetData, { ex: KV_TTL });
 
     console.log('Fallback widget created:', widgetId);
 
@@ -419,12 +413,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Widget ID je povinné' }, { status: 400 });
     }
 
-    const widget = widgets.get(widgetId);
-    console.log('Widget found:', !!widget);
-    console.log('Available widgets:', Array.from(widgets.keys()));
+    // Načtení z Vercel KV místo memory
+    const widget = await kv.get(`widget:${widgetId}`) as WidgetData | null;
+    console.log('Widget found in KV:', !!widget);
     
     if (!widget) {
-      console.log(`Widget ${widgetId} not found in memory`);
+      console.log(`Widget ${widgetId} not found in KV storage`);
       return NextResponse.json({ error: 'Widget nenalezen' }, { status: 404 });
     }
 
@@ -435,7 +429,7 @@ export async function GET(request: NextRequest) {
     // Zkontroluj expiraci widgetu (60 dní)
     if (age > MAX_WIDGET_AGE) {
       console.log(`Widget ${widgetId} expired (${Math.round(age / (24 * 60 * 60 * 1000))} days old)`);
-      widgets.delete(widgetId);
+      await kv.del(`widget:${widgetId}`);
       return NextResponse.json({ error: 'Widget vypršel platnost' }, { status: 410 });
     }
 
@@ -447,18 +441,20 @@ export async function GET(request: NextRequest) {
         // Pokus o refresh dat
         const refreshedWidget = await refreshWidgetData(widget);
         if (refreshedWidget) {
-          widgets.set(widgetId, {
+          const updatedWidget: WidgetData = {
             ...refreshedWidget,
             createdAt: widget.createdAt, // Zachovej original timestamp
             lastRefresh: now,
             profileUrl: widget.profileUrl,
             config: widget.config
-          });
+          };
+          
+          await kv.set(`widget:${widgetId}`, updatedWidget, { ex: KV_TTL });
           console.log(`Widget ${widgetId} successfully refreshed`);
           
           return NextResponse.json({ 
             success: true, 
-            data: widgets.get(widgetId),
+            data: updatedWidget,
             refreshed: true
           });
         }
@@ -468,7 +464,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('Returning widget data');
+    console.log('Returning widget data from KV');
     return NextResponse.json({ 
       success: true, 
       data: widget 
@@ -480,4 +476,4 @@ export async function GET(request: NextRequest) {
       error: 'Chyba při načítání widgetu' 
     }, { status: 500 });
   }
-} 
+}
