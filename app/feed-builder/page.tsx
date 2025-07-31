@@ -551,16 +551,24 @@ ${config.hoverEffect === 'lift' ? `
                 <div className="mb-6 flex justify-between items-center">
                   <h3 className="text-lg font-semibold text-gray-900">IFrame Embed Code</h3>
                   <div className="flex space-x-2">
+                    {generatingToken && (
+                      <div className="flex items-center space-x-2 text-blue-600">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm">Generating...</span>
+                      </div>
+                    )}
                     <button
                       onClick={copyCode}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2"
+                      disabled={!widgetToken || generatingToken}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2 disabled:opacity-50"
                     >
                       {copied ? <Check size={16} /> : <Copy size={16} />}
                       <span>{copied ? 'Copied!' : 'Copy IFrame'}</span>
                     </button>
                     <button
                       onClick={downloadHTML}
-                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2"
+                      disabled={!widgetToken || generatingToken}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2 disabled:opacity-50"
                     >
                       <Download size={16} />
                       <span>Download</span>
@@ -568,11 +576,33 @@ ${config.hoverEffect === 'lift' ? `
                   </div>
                 </div>
                 
-                <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
-                  <pre className="text-green-400 text-sm whitespace-pre-wrap">
-                    <code>{generateIFrameCode()}</code>
-                  </pre>
-                </div>
+                {widgetToken ? (
+                  <>
+                    <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
+                      <pre className="text-green-400 text-sm whitespace-pre-wrap">
+                        <code>{generateIFrameCode()}</code>
+                      </pre>
+                    </div>
+                    
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center space-x-2 text-blue-800">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm font-medium">Widget Token Generated</span>
+                      </div>
+                      <p className="text-sm text-blue-700 mt-1">
+                        This widget will work in any iframe and automatically update with your latest Instagram posts.
+                        Token expires in 1 year.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-gray-100 rounded-lg p-8 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Generating secure widget token...</p>
+                  </div>
+                )}
                 
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-green-50 rounded-lg">
@@ -581,9 +611,9 @@ ${config.hoverEffect === 'lift' ? `
                     </h4>
                     <ul className="text-sm text-green-800 space-y-1">
                       <li>• Automatically updates with new posts</li>
-                      <li>• Always shows latest content</li>
-                      <li>• Secure and isolated</li>
-                      <li>• Easy to embed anywhere</li>
+                      <li>• Works in any website or iframe</li>
+                      <li>• Secure token-based authentication</li>
+                      <li>• No cookies required</li>
                     </ul>
                   </div>
                   
@@ -593,6 +623,7 @@ ${config.hoverEffect === 'lift' ? `
                       <li>1. Copy the IFrame code above</li>
                       <li>2. Paste it into your website HTML</li>
                       <li>3. Feed updates automatically!</li>
+                      <li>4. Token is valid for 1 year</li>
                     </ol>
                   </div>
                 </div>
