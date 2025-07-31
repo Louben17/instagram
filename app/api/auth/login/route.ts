@@ -11,15 +11,15 @@ export async function GET(request: NextRequest) {
     // Rate limiting check
     const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
     
-    // Instagram OAuth URL
-    const instagramAuthUrl = new URL('https://api.instagram.com/oauth/authorize');
+    // Facebook OAuth URL for Instagram Business Login
+    const facebookAuthUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
     
-    instagramAuthUrl.searchParams.set('client_id', process.env.INSTAGRAM_CLIENT_ID!);
-    instagramAuthUrl.searchParams.set('redirect_uri', 
+    facebookAuthUrl.searchParams.set('client_id', process.env.INSTAGRAM_CLIENT_ID!);
+    facebookAuthUrl.searchParams.set('redirect_uri', 
       `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`
     );
-    instagramAuthUrl.searchParams.set('scope', 'user_profile,user_media');
-    instagramAuthUrl.searchParams.set('response_type', 'code');
+    facebookAuthUrl.searchParams.set('scope', 'instagram_basic,pages_show_list');
+    facebookAuthUrl.searchParams.set('response_type', 'code');
     
     // State parameter for security (include return URL)
     const state = Buffer.from(JSON.stringify({ 
@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       ip: clientIP 
     })).toString('base64');
     
-    instagramAuthUrl.searchParams.set('state', state);
+    facebookAuthUrl.searchParams.set('state', state);
 
-    return NextResponse.redirect(instagramAuthUrl.toString());
+    return NextResponse.redirect(facebookAuthUrl.toString());
     
   } catch (error) {
     console.error('Auth login error:', error);
