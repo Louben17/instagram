@@ -66,7 +66,8 @@ export default function FeedBuilder() {
     
     // Get current user info from feed data
     if (feedData) {
-      const userId = 'user-' + Date.now(); // We'll need to get real user ID
+      // Try to get real user ID from localStorage or API
+      // For now, we'll use a simpler approach - make iframe use same auth as current session
       const params = new URLSearchParams({
         columns: config.columns.toString(),
         rows: config.rows.toString(),
@@ -81,8 +82,9 @@ export default function FeedBuilder() {
         showUsername: 'true'
       });
       
-      setIframeUrl(`${window.location.origin}/widget/${userId}?${params.toString()}`);
-      setCurrentUser({ id: userId, username: feedData.user.username });
+      // Use current user's session instead of userId parameter
+      setIframeUrl(`${window.location.origin}/widget/current?${params.toString()}`);
+      setCurrentUser({ id: 'current', username: feedData.user.username });
     }
   }, [feedData, config]);
 
