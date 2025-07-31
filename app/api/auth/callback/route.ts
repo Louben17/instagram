@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
     // Handle Instagram OAuth errors
     if (error) {
       console.error('Instagram OAuth error:', error);
-      return NextResponse.redirect('/auth/error?error=access_denied');
+      return NextResponse.redirect(new URL('/auth/error?error=access_denied', request.url));
     }
 
     if (!code || !state) {
-      return NextResponse.redirect('/auth/error?error=missing_code');
+      return NextResponse.redirect(new URL('/auth/error?error=missing_code', request.url));
     }
 
     // Verify state parameter
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     try {
       stateData = JSON.parse(Buffer.from(state, 'base64').toString());
     } catch (e) {
-      return NextResponse.redirect('/auth/error?error=invalid_state');
+      return NextResponse.redirect(new URL('/auth/error?error=invalid_state', request.url));
     }
 
     // Exchange code for access token (Instagram Business Login)
@@ -57,26 +57,27 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       console.error('Token exchange failed:', await tokenResponse.text());
-      return NextResponse.redirect('/auth/error?error=token_exchange_failed');
+      return NextResponse.redirect(new URL('/auth/error?error=token_exchange_failed', request.url));
     }
 
     const tokenData = await tokenResponse.json();
     
-    // Instagram Business Login returns data array
-    const authData = tokenData.data?.[0];
-    if (!authData) {
-      console.error('Invalid token response format:', tokenData);
-      return NextResponse.redirect('/auth/error?error=invalid_token_response');
+    // Instagram Business Login returns direct object (not data array)
+    console.log('Token response:', tokenData);
+    
+    if (!tokenData.access_token) {
+      console.error('No access token in response:', tokenData);
+      return NextResponse.redirect(new URL('/auth/error?error=no_access_token', request.url));
     }
 
     // Get Instagram user info using Graph API
     const userInfoResponse = await fetch(
-      `https://graph.instagram.com/me?fields=id,username,account_type,media_count&access_token=${authData.access_token}`
+      `https://graph.instagram.com/me?fields=id,username,account_type,media_count&access_token=${tokenData.access_token}`
     );
 
     if (!userInfoResponse.ok) {
       console.error('User info fetch failed:', await userInfoResponse.text());
-      return NextResponse.redirect('/auth/error?error=user_info_failed');
+      return NextResponse.redirect(new URL('/auth/error?error=user_info_failed', request.url));
     }
 
     const userInfo = await userInfoResponse.json();
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
       user = {
         ...existingUser,
         username: userInfo.username,
-        accessToken: authData.access_token,
+        accessToken: tokenData.access_token,
         tokenExpiresAt,
         mediaCount: userInfo.media_count,
         lastLoginAt: now,
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
         id: userId,
         instagramUserId: userInfo.id,
         username: userInfo.username,
-        accessToken: authData.access_token,
+        accessToken: tokenData.access_token,
         tokenExpiresAt,
         mediaCount: userInfo.media_count,
         createdAt: now,
@@ -153,6 +154,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('OAuth callback error:', error);
-    return NextResponse.redirect('/auth/error?error=internal_error');
+    return NextResponse.redirect(new URL('/auth/error?error=internal_error', request.url));
   }
 }
