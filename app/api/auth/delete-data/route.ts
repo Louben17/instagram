@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
-import { RedisKeys } from '../../../../types/user';
+import { RedisKeys, User } from '../../../../types/user';
 
 const redis = Redis.fromEnv();
 
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find and delete all user data
-    const user = await redis.get(RedisKeys.userByInstagramId(user_id));
+    const user = await redis.get<User>(RedisKeys.userByInstagramId(user_id));
     
     if (user) {
       // Delete all user-related data
