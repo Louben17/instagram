@@ -7,6 +7,14 @@ export const dynamic = 'force-dynamic';
 
 const redis = Redis.fromEnv();
 
+// Handle GET requests (Facebook validation)
+export async function GET(request: NextRequest) {
+  return NextResponse.json({
+    message: "Data deletion endpoint - send POST request with user_id to delete user data",
+    instructions: "Send POST request with { user_id: 'instagram_user_id' } to delete all user data"
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
