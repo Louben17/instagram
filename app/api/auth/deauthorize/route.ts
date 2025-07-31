@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { RedisKeys, User } from '../../../../types/user';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 const redis = Redis.fromEnv();
 
 export async function POST(request: NextRequest) {
