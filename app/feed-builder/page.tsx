@@ -40,8 +40,11 @@ interface FeedConfig {
 export default function FeedBuilder() {
   const [feedData, setFeedData] = useState<FeedData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'iframe' | 'code'>('preview');
   const [copied, setCopied] = useState(false);
+  const [apiUrl, setApiUrl] = useState('');
+  const [iframeUrl, setIframeUrl] = useState('');
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   
   const [config, setConfig] = useState<FeedConfig>({
     columns: 3,
@@ -56,6 +59,32 @@ export default function FeedBuilder() {
     overlayColor: 'rgba(0,0,0,0.7)',
     width: '100%'
   });
+
+  useEffect(() => {
+    // Set URLs only on client side
+    setApiUrl(`${window.location.origin}/api/feed`);
+    
+    // Get current user info from feed data
+    if (feedData) {
+      const userId = 'user-' + Date.now(); // We'll need to get real user ID
+      const params = new URLSearchParams({
+        columns: config.columns.toString(),
+        rows: config.rows.toString(),
+        spacing: config.spacing.toString(),
+        borderRadius: config.borderRadius.toString(),
+        showCaptions: config.showCaptions.toString(),
+        showOverlay: config.showOverlay.toString(),
+        hoverEffect: config.hoverEffect,
+        backgroundColor: config.backgroundColor,
+        captionColor: config.captionColor,
+        overlayColor: config.overlayColor,
+        showUsername: 'true'
+      });
+      
+      setIframeUrl(`${window.location.origin}/widget/${userId}?${params.toString()}`);
+      setCurrentUser({ id: userId, username: feedData.user.username });
+    }
+  }, [feedData, config]);
 
   const fetchFeed = async () => {
     try {
@@ -216,13 +245,40 @@ ${config.hoverEffect === 'lift' ? `
     return css + html;
   };
 
+  const generateIFrameCode = () => {
+    if (!iframeUrl) return '';
+    
+    const width = config.width === '100%' ? '100%' : `${config.width}px`;
+    const height = Math.ceil((200 * config.rows) + (config.spacing * (config.rows + 1)) + 40);
+    
+    return `<iframe 
+  src="${iframeUrl}"
+  width="${width}" 
+  height="${height}px"
+  frameborder="0"
+  scrolling="no"
+  style="border: none; border-radius: ${config.borderRadius}px; overflow: hidden;"
+  title="Instagram Feed - @${feedData?.user.username}"
+  loading="lazy">
+</iframe>`;
+  };
+
   const copyCode = () => {
-    navigator.clipboard.writeText(generateHTML());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const codeToUse = activeTab === 'iframe' ? generateIFrameCode() : generateHTML();
+    if (codeToUse) {
+      navigator.clipboard.writeText(codeToUse);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const downloadHTML = () => {
+    const isIframe = activeTab === 'iframe';
+    const code = isIframe ? generateIFrameCode() : generateHTML();
+    const filename = isIframe ? 
+      `instagram-iframe-${feedData?.user.username}.html` : 
+      `instagram-feed-${feedData?.user.username}.html`;
+    
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -231,7 +287,10 @@ ${config.hoverEffect === 'lift' ? `
     <title>Instagram Feed - @${feedData?.user.username}</title>
 </head>
 <body>
-    ${generateHTML()}
+    <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+        <h1>Instagram Feed - @${feedData?.user.username}</h1>
+        ${code}
+    </div>
 </body>
 </html>`;
 
@@ -239,7 +298,7 @@ ${config.hoverEffect === 'lift' ? `
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `instagram-feed-${feedData?.user.username}.html`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -274,47 +333,56 @@ ${config.hoverEffect === 'lift' ? `
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Grid className="text-pink-500" size={24} />
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Instagram Feed Builder</h1>
-                  <p className="text-sm text-gray-600">Create beautiful embeddable Instagram feeds</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <a
-                  href="/dashboard"
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center space-x-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  <span>Dashboard</span>
-                </a>
+            <div className="flex items-center space-x-3">
+              <Grid className="text-pink-500" size={24} />
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Instagram Feed Builder</h1>
+                <p className="text-sm text-gray-600">Create beautiful embeddable Instagram feeds</p>
               </div>
             </div>
             
-            <div className="flex space-x-2 mt-4">
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                  activeTab === 'preview' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
-                }`}
+            <div className="flex items-center space-x-2">
+              <a
+                href="/dashboard"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center space-x-2"
               >
-                <Eye size={16} />
-                <span>Preview</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('code')}
-                className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                  activeTab === 'code' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                <Code size={16} />
-                <span>Code</span>
-              </button>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Dashboard</span>
+              </a>
+              
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setActiveTab('preview')}
+                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+                    activeTab === 'preview' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  <Eye size={16} />
+                  <span>Preview</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('iframe')}
+                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+                    activeTab === 'iframe' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>IFrame</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('code')}
+                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+                    activeTab === 'code' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  <Code size={16} />
+                  <span>HTML</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -476,10 +544,61 @@ ${config.hoverEffect === 'lift' ? `
                   dangerouslySetInnerHTML={{ __html: generateHTML() }}
                 />
               </div>
+            ) : activeTab === 'iframe' ? (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="mb-6 flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-900">IFrame Embed Code</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={copyCode}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      <span>{copied ? 'Copied!' : 'Copy IFrame'}</span>
+                    </button>
+                    <button
+                      onClick={downloadHTML}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2"
+                    >
+                      <Download size={16} />
+                      <span>Download</span>
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
+                  <pre className="text-green-400 text-sm whitespace-pre-wrap">
+                    <code>{generateIFrameCode()}</code>
+                  </pre>
+                </div>
+                
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <h4 className="font-semibold text-green-900 mb-2 flex items-center">
+                      ✅ IFrame Advantages
+                    </h4>
+                    <ul className="text-sm text-green-800 space-y-1">
+                      <li>• Automatically updates with new posts</li>
+                      <li>• Always shows latest content</li>
+                      <li>• Secure and isolated</li>
+                      <li>• Easy to embed anywhere</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
+                    <ol className="text-sm text-blue-800 space-y-1">
+                      <li>1. Copy the IFrame code above</li>
+                      <li>2. Paste it into your website HTML</li>
+                      <li>3. Feed updates automatically!</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="mb-6 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">HTML Code</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Static HTML Code</h3>
                   <div className="flex space-x-2">
                     <button
                       onClick={copyCode}
@@ -504,13 +623,26 @@ ${config.hoverEffect === 'lift' ? `
                   </pre>
                 </div>
                 
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
-                  <ol className="text-sm text-blue-800 space-y-1">
-                    <li>1. Copy the HTML code above</li>
-                    <li>2. Paste it into your website where you want the feed to appear</li>
-                    <li>3. The feed will automatically update with your latest Instagram posts</li>
-                  </ol>
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <h4 className="font-semibold text-yellow-900 mb-2 flex items-center">
+                      ⚠️ Static HTML Limitations
+                    </h4>
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>• Shows current posts only</li>
+                      <li>• No automatic updates</li>
+                      <li>• Need to regenerate for new posts</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
+                    <ol className="text-sm text-blue-800 space-y-1">
+                      <li>1. Copy the HTML code above</li>
+                      <li>2. Paste it into your website</li>
+                      <li>3. Regenerate when you want updates</li>
+                    </ol>
+                  </div>
                 </div>
               </div>
             )}
