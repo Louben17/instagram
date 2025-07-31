@@ -30,8 +30,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [apiUrl, setApiUrl] = useState('');
 
-  const apiUrl = `${window.location.origin}/api/feed`;
+  useEffect(() => {
+    // Set API URL only on client side
+    setApiUrl(`${window.location.origin}/api/feed`);
+  }, []);
 
   const fetchFeed = async () => {
     try {
@@ -61,9 +65,11 @@ export default function Dashboard() {
   };
 
   const copyApiUrl = () => {
-    navigator.clipboard.writeText(apiUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (apiUrl) {
+      navigator.clipboard.writeText(apiUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const logout = () => {
@@ -123,10 +129,13 @@ export default function Dashboard() {
           
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <code className="text-sm text-gray-700 break-all">{apiUrl}</code>
+              <code className="text-sm text-gray-700 break-all">
+                {apiUrl || 'Loading...'}
+              </code>
               <button
                 onClick={copyApiUrl}
-                className="ml-4 flex items-center space-x-1 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                disabled={!apiUrl}
+                className="ml-4 flex items-center space-x-1 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm disabled:opacity-50"
               >
                 {copied ? <Check size={16} /> : <Copy size={16} />}
                 <span>{copied ? 'Copied!' : 'Copy'}</span>
