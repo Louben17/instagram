@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Code, Eye, Copy, Check, Download, Palette, Grid, Users, Heart } from 'lucide-react';
+import { Settings, Code, Eye, Copy, Check, Download, Grid } from 'lucide-react';
 
 interface InstagramMedia {
   id: string;
@@ -40,11 +40,8 @@ interface FeedConfig {
 export default function FeedBuilder() {
   const [feedData, setFeedData] = useState<FeedData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'preview' | 'iframe' | 'code'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [copied, setCopied] = useState(false);
-  const [apiUrl, setApiUrl] = useState('');
-  const [iframeUrl, setIframeUrl] = useState('');
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   
   const [config, setConfig] = useState<FeedConfig>({
     columns: 3,
@@ -59,34 +56,6 @@ export default function FeedBuilder() {
     overlayColor: 'rgba(0,0,0,0.7)',
     width: '100%'
   });
-
-  useEffect(() => {
-    // Set URLs only on client side
-    setApiUrl(`${window.location.origin}/api/feed`);
-    
-    // Get current user info from feed data
-    if (feedData) {
-      // Try to get real user ID from localStorage or API
-      // For now, we'll use a simpler approach - make iframe use same auth as current session
-      const params = new URLSearchParams({
-        columns: config.columns.toString(),
-        rows: config.rows.toString(),
-        spacing: config.spacing.toString(),
-        borderRadius: config.borderRadius.toString(),
-        showCaptions: config.showCaptions.toString(),
-        showOverlay: config.showOverlay.toString(),
-        hoverEffect: config.hoverEffect,
-        backgroundColor: config.backgroundColor,
-        captionColor: config.captionColor,
-        overlayColor: config.overlayColor,
-        showUsername: 'true'
-      });
-      
-      // Use current user's session instead of userId parameter
-      setIframeUrl(`${window.location.origin}/widget/current?${params.toString()}`);
-      setCurrentUser({ id: 'current', username: feedData.user.username });
-    }
-  }, [feedData, config]);
 
   const fetchFeed = async () => {
     try {
@@ -247,40 +216,13 @@ ${config.hoverEffect === 'lift' ? `
     return css + html;
   };
 
-  const generateIFrameCode = () => {
-    if (!iframeUrl) return '';
-    
-    const width = config.width === '100%' ? '100%' : `${config.width}px`;
-    const height = Math.ceil((200 * config.rows) + (config.spacing * (config.rows + 1)) + 40);
-    
-    return `<iframe 
-  src="${iframeUrl}"
-  width="${width}" 
-  height="${height}px"
-  frameborder="0"
-  scrolling="no"
-  style="border: none; border-radius: ${config.borderRadius}px; overflow: hidden;"
-  title="Instagram Feed - @${feedData?.user.username}"
-  loading="lazy">
-</iframe>`;
-  };
-
   const copyCode = () => {
-    const codeToUse = activeTab === 'iframe' ? generateIFrameCode() : generateHTML();
-    if (codeToUse) {
-      navigator.clipboard.writeText(codeToUse);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    navigator.clipboard.writeText(generateHTML());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const downloadHTML = () => {
-    const isIframe = activeTab === 'iframe';
-    const code = isIframe ? generateIFrameCode() : generateHTML();
-    const filename = isIframe ? 
-      `instagram-iframe-${feedData?.user.username}.html` : 
-      `instagram-feed-${feedData?.user.username}.html`;
-    
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -291,7 +233,7 @@ ${config.hoverEffect === 'lift' ? `
 <body>
     <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
         <h1>Instagram Feed - @${feedData?.user.username}</h1>
-        ${code}
+        ${generateHTML()}
     </div>
 </body>
 </html>`;
@@ -300,7 +242,7 @@ ${config.hoverEffect === 'lift' ? `
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = `instagram-feed-${feedData?.user.username}.html`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -344,7 +286,7 @@ ${config.hoverEffect === 'lift' ? `
             </div>
             
             <div className="flex items-center space-x-2">
-              <a
+              
                 href="/dashboard"
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center space-x-2"
               >
@@ -363,17 +305,6 @@ ${config.hoverEffect === 'lift' ? `
                 >
                   <Eye size={16} />
                   <span>Preview</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('iframe')}
-                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                    activeTab === 'iframe' ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>IFrame</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('code')}
@@ -545,82 +476,6 @@ ${config.hoverEffect === 'lift' ? `
                   className="border-2 border-dashed border-gray-300 p-4 rounded-lg"
                   dangerouslySetInnerHTML={{ __html: generateHTML() }}
                 />
-              </div>
-            ) : activeTab === 'iframe' ? (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="mb-6 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">IFrame Embed Code</h3>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={copyCode}
-                      disabled={!widgetToken || generatingToken}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2 disabled:opacity-50"
-                    >
-                      {copied ? <Check size={16} /> : <Copy size={16} />}
-                      <span>{copied ? 'Copied!' : 'Copy IFrame'}</span>
-                    </button>
-                    <button
-                      onClick={downloadHTML}
-                      disabled={!widgetToken || generatingToken}
-                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2 disabled:opacity-50"
-                    >
-                      <Download size={16} />
-                      <span>Download</span>
-                    </button>
-                  </div>
-                </div>
-                
-                {widgetToken ? (
-                  <>
-                    <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
-                      <pre className="text-green-400 text-sm whitespace-pre-wrap">
-                        <code>{generateIFrameCode()}</code>
-                      </pre>
-                    </div>
-                    
-                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                      <div className="flex items-center space-x-2 text-blue-800">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-medium">Widget Token Generated</span>
-                      </div>
-                      <p className="text-sm text-blue-700 mt-1">
-                        This widget will work in any iframe and automatically update with your latest Instagram posts.
-                        Token expires in 1 year.
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-gray-100 rounded-lg p-8 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Generating secure widget token...</p>
-                  </div>
-                )}
-                
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <h4 className="font-semibold text-green-900 mb-2 flex items-center">
-                      ✅ IFrame Advantages
-                    </h4>
-                    <ul className="text-sm text-green-800 space-y-1">
-                      <li>• Automatically updates with new posts</li>
-                      <li>• Works in any website or iframe</li>
-                      <li>• Secure token-based authentication</li>
-                      <li>• No cookies required</li>
-                    </ul>
-                  </div>
-                  
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
-                    <ol className="text-sm text-blue-800 space-y-1">
-                      <li>1. Copy the IFrame code above</li>
-                      <li>2. Paste it into your website HTML</li>
-                      <li>3. Feed updates automatically!</li>
-                      <li>4. Token is valid for 1 year</li>
-                    </ol>
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm p-6">
