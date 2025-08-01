@@ -45,6 +45,9 @@ interface DebugInfo {
 }
 
 export default function FeedBuilder() {
+  // Mounting state pro předejití hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  
   const [feedData, setFeedData] = useState<FeedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'preview' | 'iframe' | 'code'>('preview');
@@ -53,12 +56,12 @@ export default function FeedBuilder() {
   const [iframeUrl, setIframeUrl] = useState('');
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   
-  // Opravené stavy pro widget token
+  // Widget token states
   const [widgetToken, setWidgetToken] = useState<string | null>(null);
   const [generatingToken, setGeneratingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
   
-  // Debug informace
+  // Debug states
   const [debugMode, setDebugMode] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -77,15 +80,22 @@ export default function FeedBuilder() {
     width: '100%'
   });
 
+  // Mount effect - řeší hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Debug funkce
   const addDebugLog = (action: string, data: any, error?: string) => {
+    if (!mounted) return; // Předejdi logování před mountem
+    
     const newLog: DebugInfo = {
       timestamp: new Date().toISOString(),
       action,
       data,
       error
     };
-    setDebugLogs(prev => [newLog, ...prev.slice(0, 49)]); // Uchovej posledních 50 logů
+    setDebugLogs(prev => [newLog, ...prev.slice(0, 49)]);
     
     if (debugMode) {
       console.log(`[DEBUG] ${action}:`, data, error ? `Error: ${error}` : '');
@@ -94,7 +104,7 @@ export default function FeedBuilder() {
 
   // Generování widget tokenu
   const generateWidgetToken = async () => {
-    if (generatingToken || widgetToken) return;
+    if (generatingToken || widgetToken || !mounted) return;
     
     setGeneratingToken(true);
     setTokenError(null);
@@ -108,7 +118,7 @@ export default function FeedBuilder() {
         },
         body: JSON.stringify({
           config: config,
-          expiresIn: '1y' // Token platný 1 rok
+          expiresIn: '1y'
         })
       });
       
@@ -137,62 +147,68 @@ export default function FeedBuilder() {
     }
   };
 
+  // URLs effect - pouze po mount
   useEffect(() => {
+    if (!mounted) return;
+    
     addDebugLog('component_mount', { config });
     
     // Set URLs only on client side
-    if (typeof window !== 'undefined') {
-      const origin = window.location.origin;
-      setApiUrl(`${origin}/api/feed`);
-      addDebugLog('urls_set', { origin, apiUrl: `${origin}/api/feed` });
+    const origin = window.location.origin;
+    setApiUrl(`${origin}/api/feed`);
+    addDebugLog('urls_set', { origin, apiUrl: `${origin}/api/feed` });
+    
+  }, [mounted, config]);
+
+  // IFrame URL effect
+  useEffect(() => {
+    if (!mounted || !feedData) return;
+    
+    const params = new URLSearchParams({
+      columns: config.columns.toString(),
+      rows: config.rows.toString(),
+      spacing: config.spacing.toString(),
+      borderRadius: config.borderRadius.toString(),
+      showCaptions: config.showCaptions.toString(),
+      showOverlay: config.showOverlay.toString(),
+      hoverEffect: config.hoverEffect,
+      backgroundColor: config.backgroundColor,
+      captionColor: config.captionColor,
+      overlayColor: config.overlayColor,
+      showUsername: 'true'
+    });
+    
+    let finalIframeUrl = '';
+    
+    if (widgetToken) {
+      finalIframeUrl = `${window.location.origin}/widget/${widgetToken}?${params.toString()}`;
+    } else {
+      finalIframeUrl = `${window.location.origin}/widget/current?${params.toString()}`;
     }
     
-    // Get current user info from feed data
-    if (feedData) {
-      const params = new URLSearchParams({
-        columns: config.columns.toString(),
-        rows: config.rows.toString(),
-        spacing: config.spacing.toString(),
-        borderRadius: config.borderRadius.toString(),
-        showCaptions: config.showCaptions.toString(),
-        showOverlay: config.showOverlay.toString(),
-        hoverEffect: config.hoverEffect,
-        backgroundColor: config.backgroundColor,
-        captionColor: config.captionColor,
-        overlayColor: config.overlayColor,
-        showUsername: 'true'
-      });
-      
-      let finalIframeUrl = '';
-      
-      if (widgetToken) {
-        // Použij token-based URL
-        finalIframeUrl = `${window.location.origin}/widget/${widgetToken}?${params.toString()}`;
-      } else {
-        // Fallback na session-based URL
-        finalIframeUrl = `${window.location.origin}/widget/current?${params.toString()}`;
-      }
-      
-      setIframeUrl(finalIframeUrl);
-      setCurrentUser({ id: 'current', username: feedData.user.username });
-      
-      addDebugLog('iframe_url_updated', { 
-        iframeUrl: finalIframeUrl,
-        hasToken: !!widgetToken,
-        username: feedData.user.username 
-      });
-    }
-  }, [feedData, config, widgetToken]);
+    setIframeUrl(finalIframeUrl);
+    setCurrentUser({ id: 'current', username: feedData.user.username });
+    
+    addDebugLog('iframe_url_updated', { 
+      iframeUrl: finalIframeUrl,
+      hasToken: !!widgetToken,
+      username: feedData.user.username 
+    });
+  }, [mounted, feedData, config, widgetToken]);
 
-  // Auto-generování tokenu při přepnutí na iframe tab
+  // Auto-generování tokenu
   useEffect(() => {
+    if (!mounted) return;
+    
     if (activeTab === 'iframe' && !widgetToken && !generatingToken && feedData) {
       addDebugLog('auto_generate_token', { reason: 'iframe_tab_activated' });
       generateWidgetToken();
     }
-  }, [activeTab, widgetToken, generatingToken, feedData]);
+  }, [mounted, activeTab, widgetToken, generatingToken, feedData]);
 
   const fetchFeed = async () => {
+    if (!mounted) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -234,13 +250,16 @@ export default function FeedBuilder() {
     }
   };
 
+  // Fetch effect - pouze po mount
   useEffect(() => {
-    fetchFeed();
-  }, []);
+    if (mounted) {
+      fetchFeed();
+    }
+  }, [mounted]);
 
   const generateHTML = () => {
-    if (!feedData) {
-      addDebugLog('generateHTML', { status: 'no_feed_data' });
+    if (!feedData || !mounted) {
+      addDebugLog('generateHTML', { status: 'no_feed_data_or_not_mounted' });
       return '';
     }
 
@@ -361,7 +380,7 @@ ${config.hoverEffect === 'lift' ? `
     <div class="feed-item" onclick="window.open('${post.permalink}', '_blank')">
       ${post.media_type === 'VIDEO' ? 
         `<video src="${post.media_url}" poster="${post.thumbnail_url || post.media_url}"></video>` :
-        `<img src="${post.media_url}" alt="${post.caption || 'Instagram post'}" loading="lazy">`
+        `<img src="${post.media_url}" alt="${(post.caption || 'Instagram post').replace(/"/g, '&quot;')}" loading="lazy">`
       }
       ${config.showOverlay ? `
         <div class="feed-overlay">
@@ -370,7 +389,7 @@ ${config.hoverEffect === 'lift' ? `
       ` : ''}
       ${config.showCaptions && post.caption ? `
         <div class="feed-caption">
-          ${post.caption.length > 100 ? post.caption.substring(0, 100) + '...' : post.caption}
+          ${(post.caption.length > 100 ? post.caption.substring(0, 100) + '...' : post.caption).replace(/"/g, '&quot;')}
         </div>
       ` : ''}
     </div>
@@ -381,8 +400,8 @@ ${config.hoverEffect === 'lift' ? `
   };
 
   const generateIFrameCode = () => {
-    if (!iframeUrl) {
-      addDebugLog('generateIFrameCode', { status: 'no_iframe_url' });
+    if (!iframeUrl || !mounted) {
+      addDebugLog('generateIFrameCode', { status: 'no_iframe_url_or_not_mounted' });
       return '';
     }
     
@@ -409,6 +428,8 @@ ${config.hoverEffect === 'lift' ? `
   };
 
   const copyCode = () => {
+    if (!mounted) return;
+    
     const codeToUse = activeTab === 'iframe' ? generateIFrameCode() : generateHTML();
     if (codeToUse) {
       navigator.clipboard.writeText(codeToUse);
@@ -419,6 +440,8 @@ ${config.hoverEffect === 'lift' ? `
   };
 
   const downloadHTML = () => {
+    if (!mounted) return;
+    
     const isIframe = activeTab === 'iframe';
     const code = isIframe ? generateIFrameCode() : generateHTML();
     const filename = isIframe ? 
@@ -450,6 +473,18 @@ ${config.hoverEffect === 'lift' ? `
     
     addDebugLog('downloadHTML', { filename, is_iframe: isIframe, file_size: html.length });
   };
+
+  // Předejdi renderování před mount
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -594,6 +629,7 @@ ${config.hoverEffect === 'lift' ? `
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-xs">
               <div className="bg-gray-800 p-3 rounded">
                 <h4 className="text-white mb-2">Current State</h4>
+                <div>Mounted: {mounted ? '✅' : '❌'}</div>
                 <div>Feed Data: {feedData ? '✅' : '❌'}</div>
                 <div>Widget Token: {widgetToken ? '✅' : '❌'}</div>
                 <div>Generating Token: {generatingToken ? '⏳' : '❌'}</div>
@@ -642,7 +678,6 @@ ${config.hoverEffect === 'lift' ? `
                 Customize Feed
               </h3>
 
-              {/* Grid Settings */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Grid Size</label>
