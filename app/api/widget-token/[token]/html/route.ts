@@ -335,18 +335,18 @@ export async function GET(
         });
       }
 
-      const mediaData = await mediaResponse.json();
-      cachedMedia = mediaData.data || [];
+const mediaData = await mediaResponse.json();
+cachedMedia = mediaData.data || [];
 
-      // Cache for 5 minutes
-      await redis.set(cacheKey, cachedMedia, { ex: 300 });
-      console.log(`Cached ${cachedMedia.length} posts for user ${tokenData.userId}`);
-    } else {
-      console.log(`Using cached data: ${cachedMedia.length} posts`);
-    }
+// Cache for 5 minutes
+await redis.set(cacheKey, cachedMedia, { ex: 300 });
+console.log(`Cached ${cachedMedia.length} posts for user ${tokenData.userId}`);
+} else {
+console.log(`Using cached data: ${cachedMedia.length} posts`);
+}
 
-    // Generate HTML widget
-    const html = generateWidgetHTML(cachedMedia, {
+// Generate HTML widget
+const html = generateWidgetHTML(cachedMedia || [], {
       username: user.username,
       id: user.instagramUserId,
       media_count: user.mediaCount,
