@@ -208,22 +208,16 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
     if (!isClient || !feedData) return '';
     
     const params = new URLSearchParams({
-      columns: config.columns.toString(),
-      rows: config.rows.toString(),
-      spacing: config.spacing.toString(),
-      borderRadius: config.borderRadius.toString(),
-      showCaptions: config.showCaptions.toString(),
-      showOverlay: config.showOverlay.toString(),
-      hoverEffect: config.hoverEffect,
-      backgroundColor: config.backgroundColor,
-      captionColor: config.captionColor,
-      overlayColor: config.overlayColor,
-      showUsername: 'true'
+      limit: (config.columns * config.rows).toString()
     });
     
     const width = config.width === '100%' ? '100%' : `${config.width}px`;
     const height = Math.ceil((200 * config.rows) + (config.spacing * (config.rows + 1)) + 40);
-    const iframeUrl = `${window.location.origin}/widget/current?${params.toString()}`;
+    
+    // Use token-based URL if available, otherwise fallback to current session
+    const iframeUrl = widgetToken 
+      ? `${window.location.origin}/api/widget-token/${widgetToken}?${params.toString()}`
+      : `${window.location.origin}/widget/current?${params.toString()}`;
     
     return `<iframe 
   src="${iframeUrl}"
