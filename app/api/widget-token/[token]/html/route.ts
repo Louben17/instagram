@@ -309,48 +309,48 @@ export async function GET(
     let cachedMedia = await redis.get<InstagramMedia[]>(cacheKey);
     
     if (!cachedMedia) {
-      console.log('Fetching fresh data from Instagram API');
-      // Fetch fresh data from Instagram Graph API
-      const mediaResponse = await fetch(
-        `https://graph.instagram.com/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username&limit=${limit}&access_token=${user.accessToken}`
-      );
+  console.log('Fetching fresh data from Instagram API');
+  // Fetch fresh data from Instagram Graph API
+  const mediaResponse = await fetch(
+    `https://graph.instagram.com/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username&limit=${limit}&access_token=${user.accessToken}`
+  );
 
-      if (!mediaResponse.ok) {
-        const errorText = await mediaResponse.text();
-        console.error('Instagram API error:', errorText);
-        
-        return new NextResponse(`
+  if (!mediaResponse.ok) {
+    const errorText = await mediaResponse.text();
+    console.error('Instagram API error:', errorText);
+    
+    return new NextResponse(`
 <!DOCTYPE html>
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Failed to fetch Instagram data</h2>
   <p>Status: ${mediaResponse.status}</p>
 </body></html>`, { 
-          status: mediaResponse.status,
-          headers: {
-            'Content-Type': 'text/html',
-            'X-Frame-Options': 'ALLOWALL',
-            'Content-Security-Policy': 'frame-ancestors *;',
-          }
-        });
+      status: mediaResponse.status,
+      headers: {
+        'Content-Type': 'text/html',
+        'X-Frame-Options': 'ALLOWALL',
+        'Content-Security-Policy': 'frame-ancestors *;',
       }
+    });
+  }
 
-const mediaData = await mediaResponse.json();
-cachedMedia = mediaData.data || [];
+  const mediaData = await mediaResponse.json();
+  cachedMedia = mediaData.data || [];
 
-// Cache for 5 minutes
-await redis.set(cacheKey, cachedMedia, { ex: 300 });
-console.log(`Cached ${cachedMedia.length} posts for user ${tokenData.userId}`);
+  // Cache for 5 minutes
+  await redis.set(cacheKey, cachedMedia, { ex: 300 });
+  console.log(`Cached ${cachedMedia.length} posts for user ${tokenData.userId}`);
 } else {
-console.log(`Using cached data: ${cachedMedia.length} posts`);
+  console.log(`Using cached data: ${cachedMedia.length} posts`);
 }
 
-// Generate HTML widget
-const html = generateWidgetHTML(cachedMedia || [], {
-      username: user.username,
-      id: user.instagramUserId,
-      media_count: user.mediaCount,
-    }, tokenData.config);
+// Generate HTML widget - now cachedMedia is guaranteed to be an array
+const html = generateWidgetHTML(cachedMedia, {
+  username: user.username,
+  id: user.instagramUserId,
+  media_count: user.mediaCount,
+}, tokenData.config);
 
     return new NextResponse(html, {
       headers: {
