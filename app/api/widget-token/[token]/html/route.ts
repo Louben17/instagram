@@ -124,25 +124,11 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
   font-size: 18px;
   grid-column: 1 / -1;
 }
-.${feedId} .feed-error {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 20px;
-  color: #666;
-  background: #f9f9f9;
-  border-radius: ${borderRadius}px;
-}
 @media (max-width: 768px) {
-  .${feedId} { 
-    grid-template-columns: repeat(${Math.min(columns, 2)}, 1fr); 
-    padding: ${Math.max(spacing / 2, 4)}px;
-  }
+  .${feedId} { grid-template-columns: repeat(${Math.min(columns, 2)}, 1fr); }
 }
 @media (max-width: 480px) {
-  .${feedId} { 
-    grid-template-columns: repeat(1, 1fr); 
-    padding: ${Math.max(spacing / 2, 4)}px;
-  }
+  .${feedId} { grid-template-columns: repeat(1, 1fr); }
 }
 </style>`;
 
@@ -150,7 +136,7 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
     caption.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const postsHTML = displayPosts.length > 0 ? displayPosts.map(post => `
-    <div class="feed-item" onclick="window.open('${post.permalink}', '_blank')" role="button" tabindex="0">
+    <div class="feed-item" onclick="window.open('${post.permalink}', '_blank')">
       ${post.media_type === 'VIDEO' ? 
         `<video src="${post.media_url}" poster="${post.thumbnail_url || post.media_url}" preload="metadata"></video>` :
         `<img src="${post.media_url}" alt="${safeCaption(post.caption || 'Instagram post')}" loading="lazy">`
@@ -162,9 +148,9 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
         </div>
       ` : ''}
     </div>
-  `).join('') : '<div class="feed-error">No posts available</div>';
+  `).join('') : '<div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #666;">No posts available</div>';
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -178,18 +164,8 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
   <div class="feed-username">@${user.username}</div>
   ${postsHTML}
 </div>
-<script>
-// Handle keyboard navigation
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && e.target.classList.contains('feed-item')) {
-    e.target.click();
-  }
-});
-</script>
 </body>
 </html>`;
-
-  return html;
 }
 
 export async function GET(
@@ -201,18 +177,8 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get('limit') || '9'), 25);
     const token = params.token;
 
-    console.log(`Widget HTML request for token: ${token}, limit: ${limit}`);
-
     if (!token) {
-      console.error('No token provided');
-      return new NextResponse('Widget token is required', { 
-        status: 400,
-        headers: {
-          'Content-Type': 'text/html',
-          'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *;',
-        }
-      });
+      return new NextResponse('Widget token is required', { status: 400 });
     }
 
     // Get widget token data from Redis
@@ -226,22 +192,15 @@ export async function GET(
       expiresAt: number;
     }>(tokenKey);
     
-    console.log(`Token data for ${token}:`, tokenData ? 'found' : 'not found');
-    
     if (!tokenData) {
       return new NextResponse(`
 <!DOCTYPE html>
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Invalid or expired widget token</h2>
-  <p>Token: ${token}</p>
 </body></html>`, { 
         status: 401,
-        headers: {
-          'Content-Type': 'text/html',
-          'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *;',
-        }
+        headers: { 'Content-Type': 'text/html' }
       });
     }
 
@@ -253,21 +212,14 @@ export async function GET(
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Widget token has expired</h2>
-  <p>Please generate a new widget token</p>
 </body></html>`, { 
         status: 401,
-        headers: {
-          'Content-Type': 'text/html',
-          'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *;',
-        }
+        headers: { 'Content-Type': 'text/html' }
       });
     }
 
     // Get user from Redis
     const user = await redis.get<User>(RedisKeys.user(tokenData.userId));
-    
-    console.log(`User data for ${tokenData.userId}:`, user ? 'found' : 'not found');
     
     if (!user || !user.isActive) {
       return new NextResponse(`
@@ -277,11 +229,7 @@ export async function GET(
   <h2>User not found or inactive</h2>
 </body></html>`, { 
         status: 404,
-        headers: {
-          'Content-Type': 'text/html',
-          'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *;',
-        }
+        headers: { 'Content-Type': 'text/html' }
       });
     }
 
@@ -292,73 +240,63 @@ export async function GET(
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Instagram token expired</h2>
-  <p>The user needs to reconnect their Instagram account</p>
 </body></html>`, { 
         status: 401,
-        headers: {
-          'Content-Type': 'text/html',
-          'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *;',
-        }
+        headers: { 'Content-Type': 'text/html' }
       });
     }
 
     const cacheKey = `${RedisKeys.userMedia(tokenData.userId)}:${limit}`;
 
     // Try to get from cache first
-    let cachedMedia = await redis.get<InstagramMedia[]>(cacheKey);
+    let postsToRender: InstagramMedia[] = [];
+    const cachedMedia = await redis.get<InstagramMedia[]>(cacheKey);
     
-    if (!cachedMedia) {
-  console.log('Fetching fresh data from Instagram API');
-  // Fetch fresh data from Instagram Graph API
-  const mediaResponse = await fetch(
-    `https://graph.instagram.com/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username&limit=${limit}&access_token=${user.accessToken}`
-  );
+    if (cachedMedia && Array.isArray(cachedMedia)) {
+      postsToRender = cachedMedia;
+      console.log(`Using cached data: ${postsToRender.length} posts`);
+    } else {
+      console.log('Fetching fresh data from Instagram API');
+      // Fetch fresh data from Instagram Graph API
+      const mediaResponse = await fetch(
+        `https://graph.instagram.com/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username&limit=${limit}&access_token=${user.accessToken}`
+      );
 
-  if (!mediaResponse.ok) {
-    const errorText = await mediaResponse.text();
-    console.error('Instagram API error:', errorText);
-    
-    return new NextResponse(`
+      if (!mediaResponse.ok) {
+        return new NextResponse(`
 <!DOCTYPE html>
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Failed to fetch Instagram data</h2>
-  <p>Status: ${mediaResponse.status}</p>
 </body></html>`, { 
-      status: mediaResponse.status,
-      headers: {
-        'Content-Type': 'text/html',
-        'X-Frame-Options': 'ALLOWALL',
-        'Content-Security-Policy': 'frame-ancestors *;',
+          status: mediaResponse.status,
+          headers: { 'Content-Type': 'text/html' }
+        });
       }
-    });
-  }
 
-  const mediaData = await mediaResponse.json();
-  cachedMedia = mediaData.data || [];
+      const mediaData = await mediaResponse.json();
+      postsToRender = mediaData.data || [];
 
-  // Cache for 5 minutes
-  await redis.set(cacheKey, cachedMedia, { ex: 300 });
-  console.log(`Cached ${cachedMedia.length} posts for user ${tokenData.userId}`);
-} else {
-  console.log(`Using cached data: ${cachedMedia.length} posts`);
-}
+      // Cache for 5 minutes
+      if (postsToRender.length > 0) {
+        await redis.set(cacheKey, postsToRender, { ex: 300 });
+        console.log(`Cached ${postsToRender.length} posts for user ${tokenData.userId}`);
+      }
+    }
 
-// Generate HTML widget - now cachedMedia is guaranteed to be an array
-const html = generateWidgetHTML(cachedMedia, {
-  username: user.username,
-  id: user.instagramUserId,
-  media_count: user.mediaCount,
-}, tokenData.config);
+    // Generate HTML widget
+    const html = generateWidgetHTML(postsToRender, {
+      username: user.username,
+      id: user.instagramUserId,
+      media_count: user.mediaCount,
+    }, tokenData.config);
 
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+        'Cache-Control': 'public, max-age=300',
         'X-Frame-Options': 'ALLOWALL',
         'Content-Security-Policy': 'frame-ancestors *;',
-        'Access-Control-Allow-Origin': '*',
       },
     });
 
@@ -369,14 +307,9 @@ const html = generateWidgetHTML(cachedMedia, {
 <html><head><title>Widget Error</title></head>
 <body style="font-family: Arial; text-align: center; padding: 50px;">
   <h2>Internal server error</h2>
-  <p>Please try again later</p>
 </body></html>`, { 
       status: 500,
-      headers: {
-        'Content-Type': 'text/html',
-        'X-Frame-Options': 'ALLOWALL',
-        'Content-Security-Policy': 'frame-ancestors *;',
-      }
+      headers: { 'Content-Type': 'text/html' }
     });
   }
 }
