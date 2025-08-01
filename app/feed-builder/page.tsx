@@ -45,7 +45,7 @@ export default function FeedBuilder() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Widget token states - PŘIDEJTE TYTO ŘÁDKY
+  // Widget token states
   const [widgetToken, setWidgetToken] = useState<string | null>(null);
   const [generatingToken, setGeneratingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -69,6 +69,53 @@ export default function FeedBuilder() {
     setIsClient(true);
   }, []);
 
+  // Generování widget tokenu
+  const generateWidgetToken = async () => {
+    if (!isClient || generatingToken || widgetToken) return;
+    
+    setGeneratingToken(true);
+    setTokenError(null);
+    
+    try {
+      const response = await fetch('/api/generate-widget-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config: config,
+          expiresIn: '1y'
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setWidgetToken(data.token);
+      console.log('Widget token generated:', data.token);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setTokenError(errorMessage);
+      console.error('Failed to generate widget token:', err);
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
+
+  // Auto-generování tokenu při přepnutí na iframe tab
+  useEffect(() => {
+    if (!isClient) return;
+    
+    if (activeTab === 'iframe' && !widgetToken && !generatingToken && feedData) {
+      console.log('Auto-generating widget token...');
+      generateWidgetToken();
+    }
+  }, [isClient, activeTab, widgetToken, generatingToken, feedData]);
+
   // Fetch feed data
   useEffect(() => {
     if (!isClient) return;
@@ -90,6 +137,7 @@ export default function FeedBuilder() {
         
         const data = await response.json();
         setFeedData(data);
+        console.log('Feed data loaded:', data);
         
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -138,10 +186,7 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
 }
 .${feedId} .feed-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background: ${config.overlayColor};
   display: flex;
   align-items: center;
@@ -158,9 +203,7 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
 }
 .${feedId} .feed-caption {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   background: linear-gradient(transparent, rgba(0,0,0,0.8));
   color: white;
   padding: 12px;
@@ -212,17 +255,16 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
   const generateIFrameCode = () => {
     if (!isClient || !feedData) return '';
     
-    const params = new URLSearchParams({
-      limit: (config.columns * config.rows).toString()
-    });
-    
+    const limit = config.columns * config.rows;
     const width = config.width === '100%' ? '100%' : `${config.width}px`;
     const height = Math.ceil((200 * config.rows) + (config.spacing * (config.rows + 1)) + 40);
     
-    // Use token-based URL if available, otherwise fallback to current session
+    // Use token-based HTML renderer if available
     const iframeUrl = widgetToken 
-      ? `${window.location.origin}/api/widget-token/${widgetToken}?${params.toString()}`
-      : `${window.location.origin}/widget/current?${params.toString()}`;
+      ? `${window.location.origin}/api/widget-token/${widgetToken}/html?limit=${limit}`
+      : `${window.location.origin}/widget/current`;
+    
+    console.log('Generated iframe URL:', iframeUrl);
     
     return `<iframe 
   src="${iframeUrl}"
@@ -501,6 +543,45 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
                     <span className="text-sm text-gray-700">Show Hover Overlay</span>
                   </label>
                 </div>
+
+                {/* Token Status for iframe tab */}
+                {activeTab === 'iframe' && (
+                  <div className="mt-6 p-3 bg-gray-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Widget Token Status</h4>
+                    {generatingToken ? (
+                      <div className="flex items-center space-x-2 text-blue-600">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-xs">Generating...</span>
+                      </div>
+                    ) : widgetToken ? (
+                      <div className="flex items-center space-x-2 text-green-600">
+                        <Check size={16} />
+                        <span className="text-xs">Token Ready</span>
+                      </div>
+                    ) : tokenError ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2 text-red-600">
+                          <AlertCircle size={16} />
+                          <span className="text-xs">Token Error</span>
+                        </div>
+                        <p className="text-xs text-red-600">{tokenError}</p>
+                        <button
+                          onClick={generateWidgetToken}
+                          className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded hover:bg-red-200"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={generateWidgetToken}
+                        className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
+                      >
+                        Generate Token
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -601,12 +682,108 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
                   </div>
                 </div>
               </div>
+            ) : activeTab === 'iframe' ? (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="mb-6 flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-900">IFrame Embed Code</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={copyCode}
+                      disabled={!widgetToken || generatingToken}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                      <span>{copied ? 'Copied!' : 'Copy IFrame'}</span>
+                    </button>
+                    <button
+                      onClick={downloadHTML}
+                      disabled={!widgetToken || generatingToken}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download size={16} />
+                      <span>Download</span>
+                    </button>
+                  </div>
+                </div>
+                
+                {widgetToken ? (
+                  <>
+                    <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
+                      <pre className="text-green-400 text-sm whitespace-pre-wrap">
+                        <code>{generateIFrameCode()}</code>
+                      </pre>
+                    </div>
+                    
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center space-x-2 text-blue-800">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm font-medium">Widget Token Generated</span>
+                      </div>
+                      <p className="text-sm text-blue-700 mt-1">
+                        This widget will work in any iframe and automatically update with your latest Instagram posts.
+                        Token expires in 1 year.
+                      </p>
+                    </div>
+                  </>
+                ) : generatingToken ? (
+                  <div className="bg-gray-100 rounded-lg p-8 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Generating secure widget token...</p>
+                  </div>
+                ) : tokenError ? (
+                  <div className="bg-red-50 rounded-lg p-8 text-center">
+                    <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-4" />
+                    <p className="text-red-600 mb-2">Failed to generate widget token</p>
+                    <p className="text-sm text-red-500 mb-4">{tokenError}</p>
+                    <button
+                      onClick={generateWidgetToken}
+                      className="px-4 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 rounded-lg p-8 text-center">
+                    <p className="text-gray-600 mb-4">Widget token not generated yet</p>
+                    <button
+                      onClick={generateWidgetToken}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Generate Widget Token
+                    </button>
+                  </div>
+                )}
+                
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <h4 className="font-semibold text-green-900 mb-2 flex items-center">
+                      ✅ IFrame Advantages
+                    </h4>
+                    <ul className="text-sm text-green-800 space-y-1">
+                      <li>• Automatically updates with new posts</li>
+                      <li>• Works in any website or iframe</li>
+                      <li>• Secure token-based authentication</li>
+                      <li>• No cookies required</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
+                    <ol className="text-sm text-blue-800 space-y-1">
+                      <li>1. Copy the IFrame code above</li>
+                      <li>2. Paste it into your website HTML</li>
+                      <li>3. Feed updates automatically!</li>
+                      <li>4. Token is valid for 1 year</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="mb-6 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {activeTab === 'iframe' ? 'IFrame Embed Code' : 'Static HTML Code'}
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Static HTML Code</h3>
                   <div className="flex space-x-2">
                     <button
                       onClick={copyCode}
@@ -620,15 +797,37 @@ ${config.hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: tran
                       className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-2"
                     >
                       <Download size={16} />
-                      <span>Download</span>
+                      <span>Download HTML</span>
                     </button>
                   </div>
                 </div>
                 
                 <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-96">
                   <pre className="text-green-400 text-sm">
-                    <code>{activeTab === 'iframe' ? generateIFrameCode() : generateHTML()}</code>
+                    <code>{generateHTML()}</code>
                   </pre>
+                </div>
+                
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <h4 className="font-semibold text-yellow-900 mb-2 flex items-center">
+                      ⚠️ Static HTML Limitations
+                    </h4>
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>• Shows current posts only</li>
+                      <li>• No automatic updates</li>
+                      <li>• Need to regenerate for new posts</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">How to use:</h4>
+                    <ol className="text-sm text-blue-800 space-y-1">
+                      <li>1. Copy the HTML code above</li>
+                      <li>2. Paste it into your website</li>
+                      <li>3. Regenerate when you want updates</li>
+                    </ol>
+                  </div>
                 </div>
               </div>
             )}
