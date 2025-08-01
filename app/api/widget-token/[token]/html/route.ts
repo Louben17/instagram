@@ -74,11 +74,12 @@ body {
   overflow: hidden;
   border-radius: ${borderRadius}px;
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.2s ease;
   background: #f0f0f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
-${hoverEffect === 'zoom' ? `.${feedId} .feed-item:hover { transform: scale(1.05); }` : ''}
-${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }` : ''}
+${hoverEffect === 'zoom' ? `.${feedId} .feed-item:hover { transform: scale(1.03); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }` : ''}
+${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }` : ''}
 .${feedId} .feed-item img, .${feedId} .feed-item video {
   width: 100%;
   height: 100%;
@@ -93,11 +94,11 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
   color: white;
-  font-size: 14px;
+  font-size: 12px;
   text-align: center;
-  padding: 12px;
+  padding: 8px;
   box-sizing: border-box;
 }
 .${feedId} .feed-item:hover .feed-overlay {
@@ -108,10 +109,10 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
   bottom: 0; left: 0; right: 0;
   background: linear-gradient(transparent, rgba(0,0,0,0.8));
   color: white;
-  padding: 12px;
-  font-size: 12px;
-  line-height: 1.3;
-  max-height: 60%;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  max-height: 50%;
   overflow: hidden;
   display: ${showCaptions ? 'block' : 'none'};
   box-sizing: border-box;
@@ -121,14 +122,20 @@ ${hoverEffect === 'lift' ? `.${feedId} .feed-item:hover { transform: translateY(
   margin-bottom: ${spacing}px;
   font-weight: 600;
   color: ${captionColor};
-  font-size: 18px;
+  font-size: 16px;
   grid-column: 1 / -1;
 }
 @media (max-width: 768px) {
-  .${feedId} { grid-template-columns: repeat(${Math.min(columns, 2)}, 1fr); }
+  .${feedId} { 
+    grid-template-columns: repeat(${Math.min(columns, 3)}, 1fr); 
+    gap: ${Math.max(spacing - 1, 2)}px;
+  }
 }
 @media (max-width: 480px) {
-  .${feedId} { grid-template-columns: repeat(1, 1fr); }
+  .${feedId} { 
+    grid-template-columns: repeat(${Math.min(columns, 2)}, 1fr); 
+    gap: ${Math.max(spacing - 1, 2)}px;
+  }
 }
 </style>`;
 
