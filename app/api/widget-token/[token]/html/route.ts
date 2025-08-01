@@ -275,11 +275,11 @@ export async function GET(
     }
 
     // Generate HTML widget
-    const html = generateWidgetHTML(cachedMedia, {
-      username: user.username,
-      id: user.instagramUserId,
-      media_count: user.mediaCount,
-    }, tokenData.config);
+const html = generateWidgetHTML(cachedMedia || [], {
+  username: user.username,
+  id: user.instagramUserId,
+  media_count: user.mediaCount,
+}, tokenData.config);
 
     return new NextResponse(html, {
       headers: {
