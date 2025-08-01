@@ -107,14 +107,14 @@ export default function FeedBuilder() {
   };
 
   // Auto-generování tokenu při přepnutí na iframe tab
-  useEffect(() => {
-    if (!isClient) return;
-    
-    if (activeTab === 'iframe' && !widgetToken && !generatingToken && feedData) {
-      console.log('Auto-generating widget token...');
-      generateWidgetToken();
-    }
-  }, [isClient, activeTab, widgetToken, generatingToken, feedData]);
+useEffect(() => {
+  if (!isClient) return;
+  
+  if (activeTab === 'iframe' && !widgetToken && !generatingToken && !tokenError && feedData) {
+    console.log('Auto-generating widget token...');
+    generateWidgetToken();
+  }
+}, [activeTab]); // POUZE activeTab jako dependency!
 
   // Fetch feed data
   useEffect(() => {

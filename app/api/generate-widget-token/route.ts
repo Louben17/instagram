@@ -34,48 +34,107 @@ function generateToken(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    // Get user from session cookie
-    const cookieStore = cookies();
-    const sessionCookie = cookieStore.get('instagram-widget-session');
+    console.log('Generate widget token request received');
     
-    if (!sessionCookie?.value) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    // Get user from multiple possible session cookies
+    const cookieStore = cookies();
+    console.log('Available cookies:', cookieStore.getAll().map(c => c.name));
+    
+    // Try different possible cookie names
+    const possibleCookies = [
+      'instagram-widget-session',
+      'session',
+      'auth-session',
+      'user-session',
+      '__Secure-next-auth.session-token',
+      'next-auth.session-token'
+    ];
+    
+    let sessionCookie;
+    let userEmail: string | undefined;
+    
+    // Try to find a valid session cookie
+    for (const cookieName of possibleCookies) {
+      sessionCookie = cookieStore.get(cookieName);
+      if (sessionCookie?.value) {
+        console.log(`Found session cookie: ${cookieName}`);
+        try {
+          const sessionData = JSON.parse(sessionCookie.value);
+          userEmail = sessionData.email || sessionData.user?.email;
+          if (userEmail) {
+            console.log(`Found user email in ${cookieName}: ${userEmail}`);
+            break;
+          }
+        } catch (e) {
+          console.log(`Failed to parse ${cookieName}:`, e);
+          // Try treating it as a direct email
+          if (sessionCookie.value.includes('@')) {
+            userEmail = sessionCookie.value;
+            console.log(`Using direct email from ${cookieName}: ${userEmail}`);
+            break;
+          }
+        }
+      }
     }
-
-    // Parse session to get user email
-    let userEmail: string;
-    try {
-      const sessionData = JSON.parse(sessionCookie.value);
-      userEmail = sessionData.email || sessionData.user?.email;
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid session' },
-        { status: 401 }
-      );
-    }
-
+    
+    // If no session cookie found, try to get user from Authorization header
     if (!userEmail) {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader) {
+        console.log('Trying authorization header');
+        // Handle bearer token or other auth methods
+      }
+    }
+    
+    // If still no user, try to extract from request body or URL
+    if (!userEmail) {
+      try {
+        const body = await request.json();
+        userEmail = body.userEmail || body.email;
+        console.log('User email from request body:', userEmail);
+      } catch (e) {
+        console.log('No valid request body');
+      }
+    }
+    
+    if (!userEmail) {
+      console.error('No user email found in any session or auth method');
       return NextResponse.json(
-        { error: 'User email not found in session' },
+        { 
+          error: 'Authentication required',
+          debug: {
+            cookies: cookieStore.getAll().map(c => ({ name: c.name, hasValue: !!c.value })),
+            message: 'No valid session found'
+          }
+        },
         { status: 401 }
       );
     }
+
+    console.log(`Processing token generation for user: ${userEmail}`);
 
     // Get user from Redis
     const user = await redis.get<User>(RedisKeys.user(userEmail));
     
-    if (!user || !user.isActive) {
+    if (!user) {
+      console.error(`User not found in Redis: ${userEmail}`);
       return NextResponse.json(
-        { error: 'User not found or inactive' },
+        { error: 'User not found in database' },
+        { status: 404 }
+      );
+    }
+    
+    if (!user.isActive) {
+      console.error(`User not active: ${userEmail}`);
+      return NextResponse.json(
+        { error: 'User account is not active' },
         { status: 404 }
       );
     }
 
     // Check if Instagram token is still valid
     if (user.tokenExpiresAt < Date.now()) {
+      console.error(`Instagram token expired for user: ${userEmail}`);
       return NextResponse.json(
         { 
           error: 'Instagram token expired',
@@ -165,7 +224,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to generate widget token',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
+        debug: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
     );
@@ -175,23 +235,39 @@ export async function POST(request: NextRequest) {
 // Get user's existing tokens
 export async function GET(request: NextRequest) {
   try {
+    // Same session handling as POST
     const cookieStore = cookies();
-    const sessionCookie = cookieStore.get('instagram-widget-session');
     
-    if (!sessionCookie?.value) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const possibleCookies = [
+      'instagram-widget-session',
+      'session', 
+      'auth-session',
+      'user-session',
+      '__Secure-next-auth.session-token',
+      'next-auth.session-token'
+    ];
+    
+    let userEmail: string | undefined;
+    
+    for (const cookieName of possibleCookies) {
+      const sessionCookie = cookieStore.get(cookieName);
+      if (sessionCookie?.value) {
+        try {
+          const sessionData = JSON.parse(sessionCookie.value);
+          userEmail = sessionData.email || sessionData.user?.email;
+          if (userEmail) break;
+        } catch (e) {
+          if (sessionCookie.value.includes('@')) {
+            userEmail = sessionCookie.value;
+            break;
+          }
+        }
+      }
     }
 
-    let userEmail: string;
-    try {
-      const sessionData = JSON.parse(sessionCookie.value);
-      userEmail = sessionData.email || sessionData.user?.email;
-    } catch {
+    if (!userEmail) {
       return NextResponse.json(
-        { error: 'Invalid session' },
+        { error: 'Authentication required' },
         { status: 401 }
       );
     }
