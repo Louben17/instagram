@@ -2,11 +2,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { cookies } from 'next/headers';
-import { RedisKeys, User } from '../../../types/user';
 
 export const dynamic = 'force-dynamic';
 
 const redis = Redis.fromEnv();
+
+// Local type definitions
+interface User {
+  instagramUserId: string;
+  username: string;
+  accessToken: string;
+  tokenExpiresAt: number;
+  isActive: boolean;
+  mediaCount: number;
+}
+
+const RedisKeys = {
+  user: (email: string) => `user:${email}`,
+  userMedia: (email: string) => `user:media:${email}`,
+};
 
 // Generate random token
 function generateToken(): string {
