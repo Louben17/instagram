@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       expiresAt,
       expiresIn: expiresInDays,
       createdAt: Date.now(),
-      widgetUrl: `${process.env.NEXT_PUBLIC_APP_URL}/widget/${token}`,
+      widgetUrl: `${process.env.NEXT_PUBLIC_APP_URL}/embed/${token}`,
       user: {
         id: user.id,
         username: user.username,
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
           token,
           ...tokenData,
           isExpired: tokenData.expiresAt < Date.now(),
-          widgetUrl: `${process.env.NEXT_PUBLIC_APP_URL}/widget/${token}`,
+          widgetUrl: `${process.env.NEXT_PUBLIC_APP_URL}/embed/${token}`,
         };
       })
     );

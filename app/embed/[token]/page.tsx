@@ -9,31 +9,55 @@ const redis = Redis.fromEnv();
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: { token: string } }
 ) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '9'), 25);
-    const userId = params.userId;
+    const token = params.token;
 
     // Add CORS headers for iframe embedding
     const headers = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
-      'X-Frame-Options': 'ALLOWALL', // Allow iframe embedding
-      'Content-Security-Policy': "frame-ancestors *;", // Allow embedding from any domain
+      'X-Frame-Options': 'ALLOWALL',
+      'Content-Security-Policy': "frame-ancestors *;",
     };
 
-    if (!userId) {
+    if (!token) {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'Widget token is required' },
         { status: 400, headers }
       );
     }
 
+    // Get widget token data from Redis
+    const tokenKey = `widget:token:${token}`;
+    const tokenData = await redis.get<{
+      userId: string;
+      createdAt: number;
+      expiresAt: number;
+    }>(tokenKey);
+    
+    if (!tokenData) {
+      return NextResponse.json(
+        { error: 'Invalid or expired widget token' },
+        { status: 401, headers }
+      );
+    }
+
+    // Check if token is expired
+    if (tokenData.expiresAt < Date.now()) {
+      await redis.del(tokenKey); // Clean up expired token
+      return NextResponse.json(
+        { error: 'Widget token has expired' },
+        { status: 401, headers }
+      );
+    }
+
     // Get user from Redis
-    const user = await redis.get<User>(RedisKeys.user(userId));
+    const user = await redis.get<User>(RedisKeys.user(tokenData.userId));
     
     if (!user || !user.isActive) {
       return NextResponse.json(
@@ -42,7 +66,7 @@ export async function GET(
       );
     }
 
-    // Check if token is expired
+    // Check if Instagram token is expired
     if (user.tokenExpiresAt < Date.now()) {
       return NextResponse.json(
         { 
@@ -53,7 +77,7 @@ export async function GET(
       );
     }
 
-    const cacheKey = `${RedisKeys.userMedia(userId)}:${limit}`;
+    const cacheKey = `${RedisKeys.userMedia(tokenData.userId)}:${limit}`;
 
     // Try to get from cache first (5 minute cache)
     let cachedMedia = await redis.get<InstagramMedia[]>(cacheKey);
@@ -121,7 +145,7 @@ export async function GET(
     }, { headers });
 
   } catch (error) {
-    console.error('Widget API error:', error);
+    console.error('Widget token API error:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',
