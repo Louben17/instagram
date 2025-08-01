@@ -684,4 +684,4 @@ ${config.hoverEffect === 'lift' ? `
       </div>
     </div>
   );
-}
+}  
