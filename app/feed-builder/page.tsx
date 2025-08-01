@@ -38,13 +38,15 @@ interface FeedConfig {
 }
 
 export default function FeedBuilder() {
-  const [feedData, setFeedData] = useState<FeedData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'preview' | 'iframe' | 'code'>('preview');
-  const [copied, setCopied] = useState(false);
-  const [apiUrl, setApiUrl] = useState('');
-  const [iframeUrl, setIframeUrl] = useState('');
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
+const [feedData, setFeedData] = useState<FeedData | null>(null);
+const [loading, setLoading] = useState(true);
+const [activeTab, setActiveTab] = useState<'preview' | 'iframe' | 'code'>('preview');
+const [copied, setCopied] = useState(false);
+const [apiUrl, setApiUrl] = useState('');
+const [iframeUrl, setIframeUrl] = useState('');
+const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
+const [widgetToken, setWidgetToken] = useState<string | null>(null);
+const [generatingToken, setGeneratingToken] = useState(false); // ← TOTO MUSÍ BÝT
   
   const [config, setConfig] = useState<FeedConfig>({
     columns: 3,
@@ -684,4 +686,4 @@ ${config.hoverEffect === 'lift' ? `
       </div>
     </div>
   );
-}  
+}
