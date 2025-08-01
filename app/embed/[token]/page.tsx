@@ -1,176 +1,402 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
-import { RedisKeys, User, InstagramMedia } from '../../../../types/user';
+'use client';
+
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useParams } from 'next/navigation';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
-const redis = Redis.fromEnv();
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '9'), 25);
-    const token = params.token;
-
-    // Add CORS headers for iframe embedding
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'X-Frame-Options': 'ALLOWALL',
-      'Content-Security-Policy': "frame-ancestors *;",
-    };
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Widget token is required' },
-        { status: 400, headers }
-      );
-    }
-
-    // Get widget token data from Redis
-    const tokenKey = `widget:token:${token}`;
-    const tokenData = await redis.get<{
-      userId: string;
-      createdAt: number;
-      expiresAt: number;
-    }>(tokenKey);
-    
-    if (!tokenData) {
-      return NextResponse.json(
-        { error: 'Invalid or expired widget token' },
-        { status: 401, headers }
-      );
-    }
-
-    // Check if token is expired
-    if (tokenData.expiresAt < Date.now()) {
-      await redis.del(tokenKey); // Clean up expired token
-      return NextResponse.json(
-        { error: 'Widget token has expired' },
-        { status: 401, headers }
-      );
-    }
-
-    // Get user from Redis
-    const user = await redis.get<User>(RedisKeys.user(tokenData.userId));
-    
-    if (!user || !user.isActive) {
-      return NextResponse.json(
-        { error: 'User not found or inactive' },
-        { status: 404, headers }
-      );
-    }
-
-    // Check if Instagram token is expired
-    if (user.tokenExpiresAt < Date.now()) {
-      return NextResponse.json(
-        { 
-          error: 'Instagram token expired',
-          message: 'The Instagram access token for this user has expired. The user needs to re-authenticate.'
-        },
-        { status: 401, headers }
-      );
-    }
-
-    const cacheKey = `${RedisKeys.userMedia(tokenData.userId)}:${limit}`;
-
-    // Try to get from cache first (5 minute cache)
-    let cachedMedia = await redis.get<InstagramMedia[]>(cacheKey);
-    
-    if (cachedMedia) {
-      return NextResponse.json({
-        data: cachedMedia,
-        user: {
-          username: user.username,
-          id: user.instagramUserId,
-          media_count: user.mediaCount,
-        },
-        cached: true,
-        cache_time: new Date().toISOString()
-      }, { headers });
-    }
-
-    // Fetch fresh data from Instagram Graph API
-    const mediaResponse = await fetch(
-      `https://graph.instagram.com/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username&limit=${limit}&access_token=${user.accessToken}`
-    );
-
-    if (!mediaResponse.ok) {
-      const errorText = await mediaResponse.text();
-      console.error('Instagram API error:', errorText);
-      
-      if (mediaResponse.status === 401) {
-        return NextResponse.json(
-          { 
-            error: 'Instagram authorization expired',
-            message: 'The Instagram access token has expired. Please re-authenticate.'
-          },
-          { status: 401, headers }
-        );
-      }
-      
-      return NextResponse.json(
-        { 
-          error: 'Failed to fetch Instagram data',
-          message: 'Unable to connect to Instagram API'
-        },
-        { status: mediaResponse.status, headers }
-      );
-    }
-
-    const mediaData = await mediaResponse.json();
-    const media: InstagramMedia[] = mediaData.data || [];
-
-    // Cache the result for 5 minutes
-    await redis.set(cacheKey, media, { ex: 300 });
-
-    return NextResponse.json({
-      data: media,
-      user: {
-        username: user.username,
-        id: user.instagramUserId,
-        media_count: user.mediaCount,
-      },
-      pagination: {
-        next: mediaData.paging?.next,
-        previous: mediaData.paging?.previous,
-      },
-      cached: false,
-      fetch_time: new Date().toISOString()
-    }, { headers });
-
-  } catch (error) {
-    console.error('Widget token API error:', error);
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        message: 'An unexpected error occurred while fetching the Instagram feed'
-      },
-      { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      }
-    );
-  }
+interface InstagramMedia {
+  id: string;
+  media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  media_url: string;
+  thumbnail_url?: string;
+  permalink: string;
+  caption?: string;
+  timestamp: string;
+  username: string;
 }
 
-// Handle CORS preflight
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
+interface FeedData {
+  data: InstagramMedia[];
+  user: {
+    username: string;
+    id: string;
+    media_count: number;
+  };
+}
+
+interface WidgetConfig {
+  columns: number;
+  rows: number;
+  spacing: number;
+  borderRadius: number;
+  showCaptions: boolean;
+  showOverlay: boolean;
+  hoverEffect: string;
+  backgroundColor: string;
+  captionColor: string;
+  overlayColor: string;
+  showUsername: boolean;
+}
+
+function WidgetContent() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const token = params.token as string;
+  
+  const [feedData, setFeedData] = useState<FeedData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Parse URL parameters for widget configuration
+  const config: WidgetConfig = {
+    columns: parseInt(searchParams.get('columns') || '3'),
+    rows: parseInt(searchParams.get('rows') || '3'),
+    spacing: parseInt(searchParams.get('spacing') || '8'),
+    borderRadius: parseInt(searchParams.get('borderRadius') || '8'),
+    showCaptions: searchParams.get('showCaptions') === 'true',
+    showOverlay: searchParams.get('showOverlay') !== 'false',
+    hoverEffect: searchParams.get('hoverEffect') || 'zoom',
+    backgroundColor: searchParams.get('backgroundColor') || '#ffffff',
+    captionColor: searchParams.get('captionColor') || '#374151',
+    overlayColor: searchParams.get('overlayColor') || 'rgba(0,0,0,0.7)',
+    showUsername: searchParams.get('showUsername') !== 'false',
+  };
+
+  const fetchFeed = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const limit = config.columns * config.rows;
+      // Use token-based API endpoint
+      const response = await fetch(`/api/widget-token/${token}?limit=${limit}`);
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Invalid or expired widget token');
+        }
+        throw new Error(`Failed to load feed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setFeedData(data);
+    } catch (err) {
+      console.error('Widget fetch error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load feed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchFeed();
+      const interval = setInterval(fetchFeed, 15 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="widget-container">
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Loading Instagram feed...</p>
+        </div>
+        
+        <style jsx>{`
+          .widget-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: ${config.spacing}px;
+            background: ${config.backgroundColor};
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .loading-state {
+            text-align: center;
+            color: #666;
+          }
+          
+          .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #e91e63;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+          }
+          
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          
+          p {
+            margin: 0;
+            font-size: 14px;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="widget-container">
+        <div className="error-state">
+          <p>Instagram feed unavailable</p>
+          <small>{error}</small>
+        </div>
+        
+        <style jsx>{`
+          .widget-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: ${config.spacing}px;
+            background: ${config.backgroundColor};
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .error-state {
+            text-align: center;
+            color: #ef4444;
+          }
+          
+          p {
+            margin: 0 0 4px;
+            font-weight: 500;
+          }
+          
+          small {
+            font-size: 12px;
+            opacity: 0.8;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // No data state
+  if (!feedData || !feedData.data.length) {
+    return (
+      <div className="widget-container">
+        <div className="empty-state">
+          <p>No Instagram posts found</p>
+        </div>
+        
+        <style jsx>{`
+          .widget-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: ${config.spacing}px;
+            background: ${config.backgroundColor};
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .empty-state {
+            text-align: center;
+            color: #666;
+          }
+          
+          p {
+            margin: 0;
+            font-size: 14px;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  const posts = feedData.data.slice(0, config.columns * config.rows);
+
+  return (
+    <div className="widget-container">
+      {config.showUsername && (
+        <div className="username">@{feedData.user.username}</div>
+      )}
+      
+      <div className="feed-grid">
+        {posts.map((post) => (
+          <div 
+            key={post.id} 
+            className="feed-item"
+            onClick={() => window.open(post.permalink, '_blank')}
+          >
+            {post.media_type === 'VIDEO' ? (
+              <video
+                src={post.media_url}
+                poster={post.thumbnail_url || post.media_url}
+                muted
+                className="media"
+              />
+            ) : (
+              <img
+                src={post.media_url}
+                alt={post.caption || 'Instagram post'}
+                className="media"
+                loading="lazy"
+              />
+            )}
+            
+            {config.showOverlay && (
+              <div className="overlay">
+                <span>View on Instagram ↗</span>
+              </div>
+            )}
+            
+            {config.showCaptions && post.caption && (
+              <div className="caption">
+                {post.caption.length > 100 
+                  ? post.caption.substring(0, 100) + '...' 
+                  : post.caption
+                }
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <style jsx>{`
+        .widget-container {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          padding: ${config.spacing}px;
+          background: ${config.backgroundColor};
+          border-radius: ${config.borderRadius}px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        
+        .username {
+          text-align: center;
+          margin-bottom: ${config.spacing}px;
+          font-weight: 600;
+          color: ${config.captionColor};
+          font-size: 18px;
+        }
+        
+        .feed-grid {
+          display: grid;
+          grid-template-columns: repeat(${config.columns}, 1fr);
+          gap: ${config.spacing}px;
+        }
+        
+        .feed-item {
+          position: relative;
+          aspect-ratio: 1;
+          overflow: hidden;
+          border-radius: ${config.borderRadius}px;
+          cursor: pointer;
+          transition: transform 0.3s ease;
+        }
+        
+        .feed-item:hover {
+          transform: ${config.hoverEffect === 'zoom' ? 'scale(1.05)' : 
+                       config.hoverEffect === 'lift' ? 'translateY(-4px)' : 'none'};
+          ${config.hoverEffect === 'lift' ? 'box-shadow: 0 8px 25px rgba(0,0,0,0.15);' : ''}
+        }
+        
+        .media {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        
+        .overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: ${config.overlayColor};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          transition: opacity 0.3s ease;
+          color: white;
+          font-size: 14px;
+          text-align: center;
+          padding: 12px;
+        }
+        
+        .feed-item:hover .overlay {
+          opacity: 1;
+        }
+        
+        .caption {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(transparent, rgba(0,0,0,0.8));
+          color: white;
+          padding: 12px;
+          font-size: 12px;
+          line-height: 1.3;
+          max-height: 60%;
+          overflow: hidden;
+        }
+        
+        @media (max-width: 768px) {
+          .feed-grid {
+            grid-template-columns: repeat(${Math.min(config.columns, 2)}, 1fr);
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .feed-grid {
+            grid-template-columns: repeat(1, 1fr);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      padding: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '200px',
+      background: '#ffffff'
+    }}>
+      <div style={{ textAlign: 'center', color: '#666' }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          border: '3px solid #f3f3f3',
+          borderTop: '3px solid #e91e63',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          margin: '0 auto 12px'
+        }}></div>
+        <p style={{ margin: 0, fontSize: '14px' }}>Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function TokenWidget() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <WidgetContent />
+    </Suspense>
+  );
 }
