@@ -45,6 +45,11 @@ export default function FeedBuilder() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Widget token states - PŘIDEJTE TYTO ŘÁDKY
+  const [widgetToken, setWidgetToken] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  
   const [config, setConfig] = useState<FeedConfig>({
     columns: 3,
     rows: 3,
