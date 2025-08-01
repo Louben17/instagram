@@ -62,6 +62,8 @@ export async function GET(
     const tokenKey = `widget:token:${token}`;
     const tokenData = await redis.get<{
       userId: string;
+      username: string;
+      instagramUserId: string;
       createdAt: number;
       expiresAt: number;
     }>(tokenKey);
@@ -82,7 +84,7 @@ export async function GET(
       );
     }
 
-    // Get user from Redis
+    // Get user from Redis using the user ID from token
     const user = await redis.get<User>(RedisKeys.user(tokenData.userId));
     
     if (!user || !user.isActive) {

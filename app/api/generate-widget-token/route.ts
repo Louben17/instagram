@@ -1,26 +1,11 @@
 // app/api/generate-widget-token/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
-import { cookies } from 'next/headers';
+import { getCurrentUser, isValidInstagramToken } from '../../../lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const redis = Redis.fromEnv();
-
-// Local type definitions
-interface User {
-  instagramUserId: string;
-  username: string;
-  accessToken: string;
-  tokenExpiresAt: number;
-  isActive: boolean;
-  mediaCount: number;
-}
-
-const RedisKeys = {
-  user: (email: string) => `user:${email}`,
-  userMedia: (email: string) => `user:media:${email}`,
-};
 
 // Generate random token
 function generateToken(): string {
@@ -34,111 +19,32 @@ function generateToken(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Generate widget token request received');
+    console.log('=== GENERATE WIDGET TOKEN REQUEST ===');
     
-    // Get user from multiple possible session cookies
-    const cookieStore = cookies();
-    console.log('Available cookies:', cookieStore.getAll().map(c => c.name));
+    // Use the same auth as feed API
+    const user = await getCurrentUser();
     
-    // Try different possible cookie names
-    const possibleCookies = [
-      'instagram-widget-session',
-      'session',
-      'auth-session',
-      'user-session',
-      '__Secure-next-auth.session-token',
-      'next-auth.session-token'
-    ];
-    
-    let sessionCookie;
-    let userEmail: string | undefined;
-    
-    // Try to find a valid session cookie
-    for (const cookieName of possibleCookies) {
-      sessionCookie = cookieStore.get(cookieName);
-      if (sessionCookie?.value) {
-        console.log(`Found session cookie: ${cookieName}`);
-        try {
-          const sessionData = JSON.parse(sessionCookie.value);
-          userEmail = sessionData.email || sessionData.user?.email;
-          if (userEmail) {
-            console.log(`Found user email in ${cookieName}: ${userEmail}`);
-            break;
-          }
-        } catch (e) {
-          console.log(`Failed to parse ${cookieName}:`, e);
-          // Try treating it as a direct email
-          if (sessionCookie.value.includes('@')) {
-            userEmail = sessionCookie.value;
-            console.log(`Using direct email from ${cookieName}: ${userEmail}`);
-            break;
-          }
-        }
-      }
-    }
-    
-    // If no session cookie found, try to get user from Authorization header
-    if (!userEmail) {
-      const authHeader = request.headers.get('authorization');
-      if (authHeader) {
-        console.log('Trying authorization header');
-        // Handle bearer token or other auth methods
-      }
-    }
-    
-    // If still no user, try to extract from request body or URL
-    if (!userEmail) {
-      try {
-        const body = await request.json();
-        userEmail = body.userEmail || body.email;
-        console.log('User email from request body:', userEmail);
-      } catch (e) {
-        console.log('No valid request body');
-      }
-    }
-    
-    if (!userEmail) {
-      console.error('No user email found in any session or auth method');
+    if (!user) {
+      console.error('No user found via getCurrentUser()');
       return NextResponse.json(
-        { 
-          error: 'Authentication required',
-          debug: {
-            cookies: cookieStore.getAll().map(c => ({ name: c.name, hasValue: !!c.value })),
-            message: 'No valid session found'
-          }
-        },
+        { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    console.log(`Processing token generation for user: ${userEmail}`);
+    console.log(`Processing token generation for user: ${user.id} (${user.username})`);
 
-    // Get user from Redis
-    const user = await redis.get<User>(RedisKeys.user(userEmail));
+    // Check if Instagram token is still valid (same as feed API)
+    const isTokenValid = await isValidInstagramToken(user.accessToken);
     
-    if (!user) {
-      console.error(`User not found in Redis: ${userEmail}`);
-      return NextResponse.json(
-        { error: 'User not found in database' },
-        { status: 404 }
-      );
-    }
-    
-    if (!user.isActive) {
-      console.error(`User not active: ${userEmail}`);
-      return NextResponse.json(
-        { error: 'User account is not active' },
-        { status: 404 }
-      );
-    }
-
-    // Check if Instagram token is still valid
-    if (user.tokenExpiresAt < Date.now()) {
-      console.error(`Instagram token expired for user: ${userEmail}`);
+    if (!isTokenValid) {
+      console.error(`Instagram token invalid for user: ${user.id}`);
       return NextResponse.json(
         { 
           error: 'Instagram token expired',
-          message: 'Please reconnect your Instagram account'
+          message: 'Please reconnect your Instagram account',
+          reauth_required: true,
+          auth_url: `/api/auth/login?return_url=${encodeURIComponent('/feed-builder')}`
         },
         { status: 401 }
       );
@@ -180,7 +86,9 @@ export async function POST(request: NextRequest) {
 
     // Store token in Redis
     const tokenData = {
-      userId: userEmail,
+      userId: user.id, // Use user.id instead of email
+      username: user.username,
+      instagramUserId: user.instagramUserId,
       config: config || {
         columns: 3,
         rows: 3,
@@ -204,18 +112,23 @@ export async function POST(request: NextRequest) {
     await redis.set(tokenKey, tokenData, { ex: redisExpirySeconds });
 
     // Also store in user's token list for management
-    const userTokensKey = `user:tokens:${userEmail}`;
+    const userTokensKey = `user:tokens:${user.id}`;
     const userTokens = await redis.get<string[]>(userTokensKey) || [];
     userTokens.push(token);
     await redis.set(userTokensKey, userTokens, { ex: redisExpirySeconds });
 
-    console.log(`Generated widget token: ${token} for user: ${userEmail}`);
+    console.log(`Generated widget token: ${token} for user: ${user.id} (${user.username})`);
 
     return NextResponse.json({
       token,
       expiresAt: new Date(expiresAt).toISOString(),
       expiresIn,
       config: tokenData.config,
+      user: {
+        id: user.id,
+        username: user.username,
+        instagramUserId: user.instagramUserId
+      },
       created: new Date().toISOString()
     });
 
@@ -224,8 +137,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to generate widget token',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        debug: process.env.NODE_ENV === 'development' ? error : undefined
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );
@@ -235,44 +147,17 @@ export async function POST(request: NextRequest) {
 // Get user's existing tokens
 export async function GET(request: NextRequest) {
   try {
-    // Same session handling as POST
-    const cookieStore = cookies();
+    // Use the same auth as feed API
+    const user = await getCurrentUser();
     
-    const possibleCookies = [
-      'instagram-widget-session',
-      'session', 
-      'auth-session',
-      'user-session',
-      '__Secure-next-auth.session-token',
-      'next-auth.session-token'
-    ];
-    
-    let userEmail: string | undefined;
-    
-    for (const cookieName of possibleCookies) {
-      const sessionCookie = cookieStore.get(cookieName);
-      if (sessionCookie?.value) {
-        try {
-          const sessionData = JSON.parse(sessionCookie.value);
-          userEmail = sessionData.email || sessionData.user?.email;
-          if (userEmail) break;
-        } catch (e) {
-          if (sessionCookie.value.includes('@')) {
-            userEmail = sessionCookie.value;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!userEmail) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const userTokensKey = `user:tokens:${userEmail}`;
+    const userTokensKey = `user:tokens:${user.id}`;
     const userTokens = await redis.get<string[]>(userTokensKey) || [];
 
     // Get details for each token
@@ -280,6 +165,7 @@ export async function GET(request: NextRequest) {
       userTokens.map(async (token) => {
         const tokenData = await redis.get<{
           userId: string;
+          username: string;
           config: any;
           createdAt: number;
           expiresAt: number;
@@ -304,7 +190,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       tokens: validTokens,
-      count: validTokens.length
+      count: validTokens.length,
+      user: {
+        id: user.id,
+        username: user.username
+      }
     });
 
   } catch (error) {
